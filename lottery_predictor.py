@@ -10,6 +10,7 @@ from data_analysis import DataAnalysis
 from datetime import datetime, timedelta
 import os
 import glob
+from sklearn.model_selection import train_test_split
 
 class LotteryPredictor:
     def __init__(self, numbers_range=(1, 80), numbers_to_draw=20):
@@ -35,12 +36,15 @@ class LotteryPredictor:
         # Analysis components
         self.analyzer = DataAnalysis([])
         
-        # State tracking
+        # Enhanced state tracking
         self.training_status = {
             'success': False,
             'model_loaded': False,
             'timestamp': None,
-            'error': None
+            'error': None,
+            'prob_score': None,
+            'pattern_score': None,
+            'features': None
         }
         
         # Initialize pipeline
@@ -519,17 +523,36 @@ class LotteryPredictor:
             return None, None, None
 
     def train_models(self, X_train, y_train):
-        """Train both models"""
+        """Train both models with test split"""
         try:
+            # Add train-test split
+            X_train, X_test, y_train, y_test = train_test_split(
+                X_train, y_train, test_size=0.2, random_state=42
+            )
+            
+            # Scale features
             X_train_scaled = self.scaler.fit_transform(X_train)
+            X_test_scaled = self.scaler.transform(X_test)
+            
+            # Train models
             self.probabilistic_model.fit(X_train_scaled, y_train)
             self.pattern_model.fit(X_train_scaled, y_train)
-            self.training_status['success'] = True
-            return True
             
+            # Add model evaluation
+            self.training_status.update({
+                'success': True,
+                'model_loaded': True,
+                'timestamp': datetime.now(),
+                'prob_score': self.probabilistic_model.score(X_test_scaled, y_test),
+                'pattern_score': self.pattern_model.score(X_test_scaled, y_test)
+            })
+            return True
         except Exception as e:
             print(f"Error training models: {e}")
-            self.training_status['error'] = str(e)
+            self.training_status.update({
+                'success': False,
+                'error': str(e)
+            })
             return False
 
     def predict(self, recent_draws):
@@ -579,6 +602,20 @@ class LotteryPredictor:
             
         except Exception as e:
             print(f"Error saving prediction: {e}")
+
+    def prepare_feature_columns(self, data):
+        """Ensure all required feature columns exist"""
+        try:
+            if self.training_status['model_loaded'] and hasattr(self.probabilistic_model, 'feature_names_in_'):
+                required_features = self.probabilistic_model.feature_names_in_
+                for col in required_features:
+                    if col not in data.columns:
+                        data[col] = 0
+                return data[required_features]
+            return data
+        except Exception as e:
+            print(f"Error preparing feature columns: {e}")
+            return data
 
 if __name__ == "__main__":
     predictor = LotteryPredictor()
