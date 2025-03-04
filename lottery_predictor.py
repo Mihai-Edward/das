@@ -45,15 +45,31 @@ class LotteryPredictor:
         
         # Initialize pipeline
         self._initialize_pipeline()
-        def _initialize_pipeline(self):
-            """Initialize the prediction pipeline with ordered stages"""
-            self.pipeline_stages = OrderedDict({
-                'data_preparation': self._prepare_pipeline_data,
-                'feature_engineering': self._create_enhanced_features,
-                'model_prediction': self._generate_model_predictions,
-                'post_processing': self._post_process_predictions
-            })
-            self.pipeline_data = {}
+    
+    def _initialize_pipeline(self):
+        """Initialize the prediction pipeline with ordered stages"""
+        self.pipeline_stages = OrderedDict({
+            'data_preparation': self._prepare_pipeline_data,
+            'feature_engineering': self._create_enhanced_features,
+            'model_prediction': self._generate_model_predictions,
+            'post_processing': self._post_process_predictions
+        })
+        self.pipeline_data = {}
+    
+    def _prepare_pipeline_data(self, data):
+        """Prepare input data for the prediction pipeline"""
+        print("\nPreparing pipeline data...")
+        try:
+            # Ensure data is properly formatted
+            if isinstance(data, pd.DataFrame):
+                self.pipeline_data['input_data'] = data
+                return data
+            else:
+                print("Warning: Input data is not a DataFrame")
+                return data
+        except Exception as e:
+            print(f"Error in data preparation: {e}")
+            return None
 
     def load_data(self, file_path=None):
         """Enhanced data loading with validation"""
@@ -169,68 +185,69 @@ class LotteryPredictor:
         
         print(f"Feature vector: {features}")
         return np.array(features)
-        def _create_analysis_features(self, data):
-            """Create enhanced features from data analysis"""
-            print("\nGenerating analysis features...")
+    
+    def _create_analysis_features(self, data):
+        """Create enhanced features from data analysis"""
+        print("\nGenerating analysis features...")
+        
+        try:
+            # Update analyzer with current data
+            formatted_draws = [(row['date'], 
+                              [row[f'number{i}'] for i in range(1, 21)]) 
+                             for _, row in data.iterrows()]
+            self.analyzer = DataAnalysis(formatted_draws)
             
-            try:
-                # Update analyzer with current data
-                formatted_draws = [(row['date'], 
-                                  [row[f'number{i}'] for i in range(1, 21)]) 
-                                 for _, row in data.iterrows()]
-                self.analyzer = DataAnalysis(formatted_draws)
-                
-                # Get analysis results
-                frequency = self.analyzer.count_frequency()
-                hot_numbers, cold_numbers = self.analyzer.hot_and_cold_numbers()
-                common_pairs = self.analyzer.find_common_pairs()
-                range_analysis = self.analyzer.number_range_analysis()
-                sequences = self.extract_sequence_patterns(data)
-                clusters = self.extract_clusters(data)
-                
-                # Convert analysis results to features
-                analysis_features = []
-                
-                # Frequency features
-                freq_vector = np.zeros(80)
-                for num, freq in frequency.items():
-                    freq_vector[num-1] = freq
-                analysis_features.extend(freq_vector / np.sum(freq_vector))
-                
-                # Hot/Cold numbers features
-                hot_vector = np.zeros(80)
-                for num, _ in hot_numbers:
-                    hot_vector[num-1] = 1
-                analysis_features.extend(hot_vector)
-                
-                # Common pairs features
-                pairs_vector = np.zeros(80)
-                for (num1, num2), freq in common_pairs:
-                    pairs_vector[num1-1] += freq
-                    pairs_vector[num2-1] += freq
-                analysis_features.extend(pairs_vector / np.sum(pairs_vector))
-                
-                # Range analysis features
-                range_vector = np.zeros(4)
-                for i, (range_name, count) in enumerate(range_analysis.items()):
-                    range_vector[i] = count
-                analysis_features.extend(range_vector / np.sum(range_vector))
-                
-                # Store analysis context
-                self.pipeline_data['analysis_context'] = {
-                    'frequency': frequency,
-                    'hot_cold': (hot_numbers, cold_numbers),
-                    'common_pairs': common_pairs,
-                    'range_analysis': range_analysis,
-                    'sequences': sequences,
-                    'clusters': clusters
-                }
-                
-                return np.array(analysis_features)
-                
-            except Exception as e:
-                print(f"Error in analysis features generation: {e}")
-                return np.zeros(244)  # Return zero vector of expected size
+            # Get analysis results
+            frequency = self.analyzer.count_frequency()
+            hot_numbers, cold_numbers = self.analyzer.hot_and_cold_numbers()
+            common_pairs = self.analyzer.find_common_pairs()
+            range_analysis = self.analyzer.number_range_analysis()
+            sequences = self.extract_sequence_patterns(data)
+            clusters = self.extract_clusters(data)
+            
+            # Convert analysis results to features
+            analysis_features = []
+            
+            # Frequency features
+            freq_vector = np.zeros(80)
+            for num, freq in frequency.items():
+                freq_vector[num-1] = freq
+            analysis_features.extend(freq_vector / np.sum(freq_vector))
+            
+            # Hot/Cold numbers features
+            hot_vector = np.zeros(80)
+            for num, _ in hot_numbers:
+                hot_vector[num-1] = 1
+            analysis_features.extend(hot_vector)
+            
+            # Common pairs features
+            pairs_vector = np.zeros(80)
+            for (num1, num2), freq in common_pairs:
+                pairs_vector[num1-1] += freq
+                pairs_vector[num2-1] += freq
+            analysis_features.extend(pairs_vector / np.sum(pairs_vector))
+            
+            # Range analysis features
+            range_vector = np.zeros(4)
+            for i, (range_name, count) in enumerate(range_analysis.items()):
+                range_vector[i] = count
+            analysis_features.extend(range_vector / np.sum(range_vector))
+            
+            # Store analysis context
+            self.pipeline_data['analysis_context'] = {
+                'frequency': frequency,
+                'hot_cold': (hot_numbers, cold_numbers),
+                'common_pairs': common_pairs,
+                'range_analysis': range_analysis,
+                'sequences': sequences,
+                'clusters': clusters
+            }
+            
+            return np.array(analysis_features)
+            
+        except Exception as e:
+            print(f"Error in analysis features generation: {e}")
+            return np.zeros(244)  # Return zero vector of expected size
 
     def extract_sequence_patterns(self, data, sequence_length=3):
         """Extract sequence patterns with validation"""
@@ -294,22 +311,22 @@ class LotteryPredictor:
             print(f"Error in enhanced feature creation: {e}")
             return self._create_feature_vector(data)  # Fallback to base features
     
-        def _generate_model_predictions(self, features):
-            """Generate predictions from both models"""
-            print("\nGenerating model predictions...")
-            try:
-                scaled_features = self.scaler.transform([features])
-                
-                prob_pred = self.probabilistic_model.predict_proba(scaled_features)[0]
-                pattern_pred = self.pattern_model.predict_proba(scaled_features)[0]
-                
-                self.pipeline_data['prob_pred'] = prob_pred
-                self.pipeline_data['pattern_pred'] = pattern_pred
-                return prob_pred, pattern_pred
-                
-            except Exception as e:
-                print(f"Error in model prediction: {e}")
-                return None, None
+    def _generate_model_predictions(self, features):
+        """Generate predictions from both models"""
+        print("\nGenerating model predictions...")
+        try:
+            scaled_features = self.scaler.transform([features])
+            
+            prob_pred = self.probabilistic_model.predict_proba(scaled_features)[0]
+            pattern_pred = self.pattern_model.predict_proba(scaled_features)[0]
+            
+            self.pipeline_data['prob_pred'] = prob_pred
+            self.pipeline_data['pattern_pred'] = pattern_pred
+            return prob_pred, pattern_pred
+            
+        except Exception as e:
+            print(f"Error in model prediction: {e}")
+            return None, None
 
     def _post_process_predictions(self, predictions):
         """Process and combine predictions"""
