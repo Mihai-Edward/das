@@ -21,10 +21,50 @@ class KinoDataCollector:
         self.base_url = "https://lotostats.ro/toate-rezultatele-grecia-kino-20-80"
         self.driver_path = "C:/Users/MihaiNita/OneDrive - Prime Batteries/Desktop/versiuni_de_care_nu_ma_ating/Versiune1.4/msedgedriver.exe"
         self.csv_file = 'C:/Users/MihaiNita/OneDrive - Prime Batteries/Desktop/versiuni_de_care_nu_ma_ating/Versiune1.4/src/historical_draws.csv'
+        
+        # Add data validation tracking
+        self.last_collection_time = None
+        self.collection_status = {
+            'success': False,
+            'draws_collected': 0,
+            'last_error': None,
+            'last_successful_draw': None
+        }
 
     def update_timestamps(self):
         current_utc = datetime.now(self.utc_tz)
         self.current_utc_str = current_utc.strftime('%Y-%m-%d %H:%M:%S')
+        self.last_collection_time = current_utc
+
+    def validate_draw_data(self, numbers):
+        """Validate drawn numbers before saving"""
+        try:
+            if not numbers:
+                if self.debug:
+                    print("Empty numbers list detected")
+                return False
+                
+            if not all(isinstance(n, int) for n in numbers):
+                if self.debug:
+                    print("Non-integer values detected in numbers")
+                return False
+                
+            if not all(1 <= n <= 80 for n in numbers):
+                if self.debug:
+                    print("Numbers outside valid range (1-80) detected")
+                return False
+                
+            if len(set(numbers)) != len(numbers):
+                if self.debug:
+                    print("Duplicate numbers detected")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Error during validation: {str(e)}")
+            return False
 
     def extract_numbers(self, number_cells):
         numbers = []
@@ -44,43 +84,66 @@ class KinoDataCollector:
 
     def save_draw(self, draw_date, numbers):
         """Save draw to CSV file in the correct format"""
+        # Validate data before processing
+        if not self.validate_draw_data(numbers):
+            if self.debug:
+                print(f"Invalid draw data detected for date {draw_date}")
+            self.collection_status['last_error'] = "Invalid draw data"
+            return False
+        
         # Ensure exactly 20 numbers
         if len(numbers) > 20:
             numbers = sorted(numbers)[:20]
         elif len(numbers) < 20:
             print(f"Warning: Draw has less than 20 numbers: {len(numbers)}")
-            return
+            self.collection_status['last_error'] = "Insufficient numbers"
+            return False
         
-        # Make sure directory exists
-        os.makedirs(os.path.dirname(self.csv_file), exist_ok=True)
-        
-        # Create dictionary with individual number columns
-        data = {'date': draw_date}
-        for i, num in enumerate(sorted(numbers), 1):
-            data[f'number{i}'] = num
-        
-        # Create DataFrame
-        draw_df = pd.DataFrame([data])
-        
-        # Save to CSV
-        if os.path.exists(self.csv_file) and os.path.getsize(self.csv_file) > 0:
-            try:
-                existing_df = pd.read_csv(self.csv_file)
-                combined_df = pd.concat([existing_df, draw_df], ignore_index=True)
-                # Keep only the last 24 draws
-                combined_df = combined_df.tail(24)
-                combined_df.to_csv(self.csv_file, index=False)
-            except pd.errors.EmptyDataError:
+        try:
+            # Make sure directory exists
+            os.makedirs(os.path.dirname(self.csv_file), exist_ok=True)
+            
+            # Create dictionary with individual number columns
+            data = {'date': draw_date}
+            for i, num in enumerate(sorted(numbers), 1):
+                data[f'number{i}'] = num
+            
+            # Create DataFrame
+            draw_df = pd.DataFrame([data])
+            
+            # Save to CSV
+            if os.path.exists(self.csv_file) and os.path.getsize(self.csv_file) > 0:
+                try:
+                    existing_df = pd.read_csv(self.csv_file)
+                    combined_df = pd.concat([existing_df, draw_df], ignore_index=True)
+                    # Keep only the last 24 draws
+                    combined_df = combined_df.tail(24)
+                    combined_df.to_csv(self.csv_file, index=False)
+                except pd.errors.EmptyDataError:
+                    draw_df.to_csv(self.csv_file, index=False)
+                print(f"Draw {draw_date} saved to {self.csv_file}")
+            else:
                 draw_df.to_csv(self.csv_file, index=False)
-            print(f"Draw {draw_date} saved to {self.csv_file}")
-        else:
-            draw_df.to_csv(self.csv_file, index=False)
-            print(f"Created new file {self.csv_file} with draw {draw_date}")
+                print(f"Created new file {self.csv_file} with draw {draw_date}")
+            
+            # Update collection status
+            self.collection_status['success'] = True
+            self.collection_status['draws_collected'] += 1
+            self.collection_status['last_successful_draw'] = draw_date
+            return True
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Error saving draw: {str(e)}")
+            self.collection_status['last_error'] = str(e)
+            return False
 
     def fetch_latest_draws(self, num_draws=24, delay=1):
         driver = None
         try:
             print(f"\nFetching {num_draws} latest draws...")
+            self.collection_status['draws_collected'] = 0
+            self.update_timestamps()
 
             # Setup Edge options
             edge_options = Options()
@@ -136,17 +199,22 @@ class KinoDataCollector:
 
                 except Exception as e:
                     print(f"Error processing row: {str(e)}")
+                    self.collection_status['last_error'] = str(e)
                     continue
 
             if draws:
                 print(f"\nSuccessfully collected {len(draws)} draws")
+                self.collection_status['success'] = True
                 return draws
             else:
                 print("\nNo draws found.")
+                self.collection_status['success'] = False
                 return []
 
         except Exception as e:
             print(f"Error: {str(e)}")
+            self.collection_status['success'] = False
+            self.collection_status['last_error'] = str(e)
             return []
 
         finally:
@@ -163,3 +231,4 @@ if __name__ == "__main__":
         print("\nCollected draws:")
         for draw_date, numbers in draws:
             print(f"Date: {draw_date}, Numbers: {', '.join(map(str, numbers))}")
+        print("\nCollection Status:", collector.collection_status)

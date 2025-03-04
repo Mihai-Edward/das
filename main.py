@@ -179,6 +179,119 @@ def train_and_predict():
             print(historical_data.head())
             print("\nColumns in data:", historical_data.columns.tolist())
 
+def perform_complete_analysis(draws):
+    """Perform all analyses and save to Excel"""
+    try:
+        if not draws:
+            collector = KinoDataCollector()
+            draws = collector.fetch_latest_draws()
+        
+        if draws:
+            analysis = DataAnalysis(draws)
+            
+            # Perform all analyses
+            analysis_data = {
+                'frequency': analysis.get_top_numbers(20),
+                'suggested_numbers': analysis.suggest_numbers(),
+                'common_pairs': analysis.find_common_pairs(),
+                'consecutive_numbers': analysis.find_consecutive_numbers(),
+                'range_analysis': analysis.number_range_analysis(),
+                'hot_cold_numbers': analysis.hot_and_cold_numbers()
+            }
+            
+            # Save to specified Excel file
+            excel_path = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\versiuni_de_care_nu_ma_ating\\Versiune1.4\\data\\processed\\lottery_analysis.xlsx'
+            
+            # Create Excel writer
+            with pd.ExcelWriter(excel_path, engine='xlsxwriter') as writer:
+                # Frequency Analysis
+                pd.DataFrame({
+                    'Top 20 Numbers': analysis_data['frequency'],
+                    'Frequency Count': [analysis.count_frequency().get(num, 0) for num in analysis_data['frequency']]
+                }).to_excel(writer, sheet_name='Frequency Analysis', index=False)
+                
+                # Suggested Numbers
+                pd.DataFrame({
+                    'Suggested Numbers': analysis_data['suggested_numbers']
+                }).to_excel(writer, sheet_name='Suggested Numbers', index=False)
+                
+                # Common Pairs
+                pd.DataFrame(analysis_data['common_pairs'], 
+                           columns=['Pair', 'Frequency']
+                ).to_excel(writer, sheet_name='Common Pairs', index=False)
+                
+                # Consecutive Numbers
+                pd.DataFrame({
+                    'Consecutive Sets': [str(x) for x in analysis_data['consecutive_numbers']]
+                }).to_excel(writer, sheet_name='Consecutive Numbers', index=False)
+                
+                # Range Analysis
+                pd.DataFrame(analysis_data['range_analysis'].items(),
+                           columns=['Range', 'Count']
+                ).to_excel(writer, sheet_name='Range Analysis', index=False)
+                
+                # Hot and Cold Numbers
+                hot, cold = analysis_data['hot_cold_numbers']
+                pd.DataFrame({
+                    'Hot Numbers': hot,
+                    'Cold Numbers': cold
+                }).to_excel(writer, sheet_name='Hot Cold Analysis', index=False)
+            
+            print(f"\nComplete analysis saved to: {excel_path}")
+            return True
+            
+    except Exception as e:
+        print(f"\nError in complete analysis: {str(e)}")
+        return False
+
+def test_pipeline_integration():
+    """Test the integrated prediction pipeline"""
+    try:
+        pipeline_status = {
+            'data_collection': False,
+            'analysis': False,
+            'prediction': False,
+            'evaluation': False
+        }
+
+        # 1. Data Collection
+        print("\nStep 1: Collecting data...")
+        collector = KinoDataCollector()
+        draws = collector.fetch_latest_draws()
+        if draws:
+            pipeline_status['data_collection'] = True
+            print("✓ Data collection successful")
+            
+            # Save draws to CSV
+            for draw_date, numbers in draws:
+                save_draw_to_csv(draw_date, numbers)
+
+            # 2. Analysis
+            print("\nStep 2: Performing analysis...")
+            if perform_complete_analysis(draws):
+                pipeline_status['analysis'] = True
+                print("✓ Analysis complete and saved")
+
+            # 3. ML Prediction
+            print("\nStep 3: Generating prediction...")
+            check_and_train_model()
+            train_and_predict()
+            pipeline_status['prediction'] = True
+            print("✓ Prediction generated")
+
+            # 4. Evaluation
+            print("\nStep 4: Evaluating predictions...")
+            evaluator = PredictionEvaluator()
+            evaluator.evaluate_past_predictions()
+            pipeline_status['evaluation'] = True
+            print("✓ Evaluation complete")
+
+        return pipeline_status
+
+    except Exception as e:
+        print(f"\nError in pipeline: {str(e)}")
+        return pipeline_status
+
 def main():
     ensure_directories()
     
@@ -187,39 +300,18 @@ def main():
 
     while True:
         print("\n==========================")
-        print("1. Show number frequency")
-        print("2. Get number suggestion")
         print("3. Fetch latest draws from lotostats.ro")
-        print("4. Find common pairs")
-        print("5. Find consecutive numbers")
-        print("6. Number range analysis")
-        print("7. Find hot and cold numbers")
-        print("8. Save analysis to Excel")
+        print("8. Complete Analysis & Save")
         print("9. Get ML prediction")
         print("10. Evaluate prediction accuracy")
-        print("11. Exit")
+        print("11. Run Complete Pipeline Test")
+        print("12. Exit")
         print("==========================\n")
 
         try:
-            choice = input("Choose an option (1-11): ")
-
-            if choice == '1':
-                if not draws:
-                    draws = collector.fetch_latest_draws()
-                analysis = DataAnalysis(draws)
-                top_numbers = analysis.get_top_numbers(20)
-                print("\nTop 20 most frequent numbers:", ', '.join(map(str, top_numbers)))
-                sorted_top_numbers = sorted(top_numbers)
-                print("Sorted from 1 to 80:", ', '.join(map(str, sorted_top_numbers)))
+            choice = input("Choose an option (3,8-12): ")
             
-            elif choice == '2':
-                if not draws:
-                    draws = collector.fetch_latest_draws()
-                analysis = DataAnalysis(draws)
-                suggested_numbers = analysis.suggest_numbers()
-                print("\nSuggested numbers:", ', '.join(map(str, suggested_numbers)))
-            
-            elif choice == '3':
+            if choice == '3':
                 draws = collector.fetch_latest_draws()
                 if draws:
                     print("\nDraws collected successfully:")
@@ -230,45 +322,15 @@ def main():
                 else:
                     print("\nFailed to fetch draws")
             
-            elif choice == '4':
-                if not draws:
-                    draws = collector.fetch_latest_draws()
-                analysis = DataAnalysis(draws)
-                common_pairs = analysis.find_common_pairs()
-                print("\nCommon pairs:", common_pairs)
-            
-            elif choice == '5':
-                if not draws:
-                    draws = collector.fetch_latest_draws()
-                analysis = DataAnalysis(draws)
-                consecutive_numbers = analysis.find_consecutive_numbers()
-                print("\nConsecutive numbers:", consecutive_numbers)
-            
-            elif choice == '6':
-                if not draws:
-                    draws = collector.fetch_latest_draws()
-                analysis = DataAnalysis(draws)
-                range_analysis = analysis.number_range_analysis()
-                print("\nNumber range analysis:", range_analysis)
-            
-            elif choice == '7':
-                if not draws:
-                    draws = collector.fetch_latest_draws()
-                analysis = DataAnalysis(draws)
-                hot, cold = analysis.hot_and_cold_numbers()
-                print("\nHot numbers:", hot)
-                print("Cold numbers:", cold)
-            
             elif choice == '8':
-                if not draws:
-                    draws = collector.fetch_latest_draws()
-                analysis = DataAnalysis(draws)
-                analysis.save_to_excel("lottery_analysis.xlsx")
-                print("\nAnalysis results saved to lottery_analysis.xlsx")
+                success = perform_complete_analysis(draws)
+                if success:
+                    print("\nComplete analysis performed and saved successfully")
+                else:
+                    print("\nFailed to perform complete analysis")
             
             elif choice == '9':
                 check_and_train_model()
-                
                 print("\nGenerating ML prediction for next draw...")
                 train_and_predict()
             
@@ -277,11 +339,25 @@ def main():
                 evaluator.evaluate_past_predictions()
             
             elif choice == '11':
+                print("\nRunning complete pipeline...")
+                print("This will execute steps 3->8->9->10 in sequence")
+                confirm = input("Continue? (y/n): ")
+                if confirm.lower() == 'y':
+                    status = test_pipeline_integration()
+                    print("\nPipeline Test Results:")
+                    for step, success in status.items():
+                        print(f"{step}: {'✓' if success else '✗'}")
+                    
+                    if all(status.values()):
+                        print("\nComplete pipeline test successful!")
+                    else:
+                        print("\nSome pipeline steps failed. Check the results above.")
+            
+            elif choice == '12':
                 print("\nExiting program...")
                 sys.exit(0)
-            
             else:
-                print("\nInvalid option. Please choose 1-11")
+                print("\nInvalid option. Please choose 3,8-12")
 
         except Exception as e:
             print(f"\nAn error occurred: {str(e)}")
