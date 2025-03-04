@@ -102,16 +102,51 @@ class DrawHandler:
         return save_predictions_to_excel(predictions, probabilities, timestamp, excel_file)
 
     def train_ml_models(self, csv_file=None, models_dir=None):
+        """Train ML models using LotteryPredictor"""
         if csv_file is None:
             csv_file = self.csv_file
         if models_dir is None:
             models_dir = self.models_dir
-        return train_ml_models(csv_file, models_dir)
+            
+        try:
+            predictor = LotteryPredictor(numbers_range=(1, 80), numbers_to_draw=20)
+            predictor.models_dir = models_dir
+            
+            # Load and prepare data
+            historical_data = pd.read_csv(csv_file)
+            processed_data = self._prepare_pipeline_data(historical_data)
+            
+            # Train and save models
+            prediction, probabilities, analysis = predictor.train_and_predict(
+                historical_data=processed_data
+            )
+            
+            return True
+        except Exception as e:
+            print(f"Error training models: {e}")
+            return False
 
     def get_ml_prediction(self, csv_file=None):
+        """Get prediction using LotteryPredictor"""
         if csv_file is None:
             csv_file = self.csv_file
-        return get_ml_prediction(csv_file)
+            
+        try:
+            predictor = LotteryPredictor(numbers_range=(1, 80), numbers_to_draw=20)
+            historical_data = pd.read_csv(csv_file)
+            
+            # Prepare data
+            processed_data = self._prepare_pipeline_data(historical_data)
+            
+            # Get prediction
+            prediction, probabilities, analysis = predictor.train_and_predict(
+                historical_data=processed_data
+            )
+            
+            return prediction, probabilities, analysis
+        except Exception as e:
+            print(f"Error getting prediction: {e}")
+            return None, None, None
 
     # Helper methods
     def _load_historical_data(self):
@@ -162,19 +197,74 @@ class DrawHandler:
 
 # Keep original functions as module-level functions for backward compatibility
 def save_draw_to_csv(draw_date, draw_numbers, csv_file='C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\proiectnow\\Versiune1.4\\src\\historical_draws.csv'):
-    """Original save_draw_to_csv function"""
-    # Original implementation remains unchanged
-    pass  # Replace with the actual implementation of the function
+    """Save draw results to CSV"""
+    try:
+        # Prepare data
+        draw_data = {
+            'date': [draw_date],
+            **{f'number{i+1}': [num] for i, num in enumerate(sorted(draw_numbers))}
+        }
+        df = pd.DataFrame(draw_data)
+        
+        # Save to CSV
+        if os.path.exists(csv_file):
+            df.to_csv(csv_file, mode='a', header=False, index=False)
+        else:
+            df.to_csv(csv_file, index=False)
+        return True
+    except Exception as e:
+        print(f"Error saving draw to CSV: {e}")
+        return False
 
 def save_predictions_to_csv(predicted_numbers, probabilities, timestamp, csv_file='data/processed/predictions.csv'):
-    """Original save_predictions_to_csv function"""
-    # Original implementation remains unchanged
-    pass  # Replace with the actual implementation of the function
+    """Save predictions to CSV"""
+    try:
+        data = {
+            'Timestamp': [timestamp],
+            'Predicted_Numbers': [','.join(map(str, predicted_numbers))],
+            'Probabilities': [','.join(map(str, [probabilities[num - 1] for num in predicted_numbers]))]
+        }
+        df = pd.DataFrame(data)
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(csv_file), exist_ok=True)
+        
+        if os.path.exists(csv_file):
+            df.to_csv(csv_file, mode='a', header=False, index=False)
+        else:
+            df.to_csv(csv_file, index=False)
+        return True
+    except Exception as e:
+        print(f"Error saving predictions to CSV: {e}")
+        return False
 
 def save_predictions_to_excel(predictions, probabilities, timestamp, excel_file='data/processed/predictions.xlsx'):
-    """Original save_predictions_to_excel function"""
-    # Original implementation remains unchanged
-    pass  # Replace with the actual implementation of the function
+    """Save predictions to Excel"""
+    try:
+        data = {
+            'Timestamp': [timestamp],
+            'Predicted_Numbers': [','.join(map(str, predictions))],
+            'Probabilities': [','.join(map(str, [probabilities[num - 1] for num in predictions]))]
+        }
+        df = pd.DataFrame(data)
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(excel_file), exist_ok=True)
+        
+        if os.path.exists(excel_file):
+            # Load existing workbook
+            book = load_workbook(excel_file)
+            with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+                writer.book = book
+                writer.sheets = {ws.title: ws for ws in book.worksheets}
+                df.to_excel(writer, index=False, header=False, startrow=writer.sheets['Sheet1'].max_row + 1)
+        else:
+            # Create new workbook
+            df.to_excel(excel_file, index=False)
+        return True
+    except Exception as e:
+        print(f"Error saving predictions to Excel: {e}")
+        return False
 
 def train_ml_models(csv_file='C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\proiectnow\\Versiune1.4\\src\\historical_draws.csv', models_dir='src/ml_models'):
     """Original train_ml_models function"""
