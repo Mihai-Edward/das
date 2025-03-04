@@ -9,6 +9,7 @@ from data_analysis import DataAnalysis
 from draw_handler import save_draw_to_csv
 from prediction_evaluator import PredictionEvaluator
 import joblib
+from draw_handler import DrawHandler  # Add this import
 
 def ensure_directories():
     directories = ['src/ml_models', 'data/processed']
@@ -16,20 +17,24 @@ def ensure_directories():
         os.makedirs(directory, exist_ok=True)
 
 def check_and_train_model():
-    model_timestamp_file = 'src/model_timestamp.txt'
-    models_dir = 'src/ml_models'
-    needs_training = False
-    if not os.path.exists(model_timestamp_file):
-        needs_training = True
-    else:
-        with open(model_timestamp_file, 'r') as f:
-            timestamp = f.read().strip()
-            model_path = f'{models_dir}/lottery_predictor_{timestamp}'
-            if not os.path.exists(f"{model_path}_prob_model.pkl"):
-                needs_training = True
-    if needs_training:
+    """Check if a trained model exists and train if needed using DrawHandler"""
+    handler = DrawHandler()
+    model_path = handler._get_latest_model()
+    
+    if not model_path:
         print("No trained model found. Training new model...")
-        train_and_predict()
+        if handler.train_ml_models():
+            print("Model training completed successfully")
+        else:
+            print("Warning: Model training may have encountered issues")
+    else:
+        # Verify that all required model files exist
+        model_files = [f"{model_path}_prob_model.pkl", f"{model_path}_pattern_model.pkl", f"{model_path}_scaler.pkl"]
+        if all(os.path.exists(file) for file in model_files):
+            print(f"Model found: {os.path.basename(model_path)}")
+        else:
+            print("Model files incomplete. Retraining model...")
+            handler.train_ml_models()
 
 def load_data(file_path):
     if not os.path.exists(file_path):
@@ -100,84 +105,42 @@ def evaluate_numbers(historical_data):
 
 def train_and_predict():
     try:
-        predictor = LotteryPredictor(numbers_range=(1, 80), numbers_to_draw=20)
-        models_dir = 'src/ml_models'
-        if not os.path.exists(models_dir):
-            os.makedirs(models_dir)
+        handler = DrawHandler()  # Use DrawHandler instead of direct LotteryPredictor
         
-        model_timestamp_file = 'src/model_timestamp.txt'
-        model_loaded = False
+        # First ensure models are trained
+        print("Checking/Training models...")
+        if handler.train_ml_models():
+            print("Models ready")
         
-        if os.path.exists(model_timestamp_file):
-            with open(model_timestamp_file, 'r') as f:
-                timestamp = f.read().strip()
-                model_path = f'{models_dir}/lottery_predictor_{timestamp}'
-                try:
-                    predictor.load_models(model_path)
-                    print(f"Model loaded from {model_path}")
-                    model_loaded = True
-                except Exception as e:
-                    print(f"Error loading model: {e}")
+        # Generate prediction using pipeline
+        print("\nGenerating predictions...")
+        predictions, probabilities, analysis = handler.handle_prediction_pipeline()
         
-        if not model_loaded:
-            data_file = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\proiectnow\\Versiune1.4\\src\\historical_draws.csv'
-            print(f"Loading data from {data_file}...")
-            historical_data = load_data(data_file)
-            historical_data = extract_date_features(historical_data)
+        if predictions is not None:
+            formatted_numbers = ','.join(map(str, predictions))
+            next_draw_time = get_next_draw_time(datetime.now())
+            print(f"Predicted numbers for the next draw at {next_draw_time.strftime('%H:%M %d-%m-%Y')}: {formatted_numbers}")
+            print(f"Prediction probabilities: {[probabilities[num - 1] for num in predictions if num <= len(probabilities)]}")
+
+            # Save predictions
+            predictions_file = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\versiuni_de_care_nu_ma_ating\\Versiune1.4\\data\\processed\\predictions.csv'
+            handler.save_predictions_to_csv(predictions, probabilities, next_draw_time.strftime('%Y-%m-%d %H:%M:%S'), predictions_file)
             
-            print("Preparing training data...")
-            X, y = predictor.prepare_data(historical_data)
+            # Optionally add top 4 numbers if still needed
+            if analysis and 'hot_numbers' in analysis:
+                top_4_numbers = analysis['hot_numbers'][:4]
+                top_4_file_path = r'C:\Users\MihaiNita\OneDrive - Prime Batteries\Desktop\proiectnow\Versiune1.4\data\processed\top_4.xlsx'
+                save_top_4_numbers_to_excel(top_4_numbers, top_4_file_path)
+                print(f"Top 4 numbers based on analysis: {','.join(map(str, top_4_numbers))}")
             
-            print(f"Shape of X: {X.shape}")
-            print(f"Shape of y: {y.shape}")
-            
-            from sklearn.model_selection import train_test_split
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-            
-            print("Training models...")
-            predictor.train_models(X_train, y_train)
-            
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            model_path = f'{models_dir}/lottery_predictor_{timestamp}'
-            predictor.save_models(model_path)
-            
-            with open(model_timestamp_file, 'w') as f:
-                f.write(timestamp)
-            
-            print("\nModel training and saving complete.\n")
+            return predictions, probabilities, analysis
         else:
-            data_file = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\proiectnow\\Versiune1.4\\src\\historical_draws.csv'
-            print(f"Loading data from {data_file}...")
-            historical_data = load_data(data_file)
-            historical_data = extract_date_features(historical_data)
-        
-        print("Generating ML prediction for next draw...")
-        recent_draws = historical_data.tail(5).copy()
-        predicted_numbers, probabilities = predictor.predict(recent_draws)
-
-        # Evaluate and add top 4 numbers based on evaluation
-        top_4_numbers = evaluate_numbers(historical_data)
-        
-        formatted_numbers = ','.join(map(str, predicted_numbers))
-        formatted_top_4_numbers = ','.join(map(str, top_4_numbers))
-        next_draw_time = get_next_draw_time(datetime.now())
-        print(f"Predicted numbers for the next draw at {next_draw_time.strftime('%H:%M %d-%m-%Y')}: {formatted_numbers}")
-        print(f"Top 4 numbers based on evaluation: {formatted_top_4_numbers}")
-        print(f"Prediction probabilities: {[probabilities[num - 1] for num in predicted_numbers if num <= len(probabilities)]}")
-
-        predictions_file = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\versiuni_de_care_nu_ma_ating\\Versiune1.4\\data\\processed\\predictions.csv'
-        save_predictions_to_csv(predicted_numbers, probabilities, next_draw_time, predictions_file)
-        
-        # Save top 4 numbers to Excel
-        top_4_file_path = r'C:\Users\MihaiNita\OneDrive - Prime Batteries\Desktop\proiectnow\Versiune1.4\data\processed\top_4.xlsx'
-        save_top_4_numbers_to_excel(top_4_numbers, top_4_file_path)
-        
+            print("Failed to generate predictions")
+            return None, None, None
+            
     except Exception as e:
         print(f"\nError: {str(e)}")
-        if 'historical_data' in locals():
-            print("\nFirst few rows of processed data:")
-            print(historical_data.head())
-            print("\nColumns in data:", historical_data.columns.tolist())
+        return None, None, None
 
 def perform_complete_analysis(draws):
     """Perform all analyses and save to Excel"""
@@ -247,6 +210,7 @@ def perform_complete_analysis(draws):
 def test_pipeline_integration():
     """Test the integrated prediction pipeline"""
     try:
+        handler = DrawHandler()
         pipeline_status = {
             'data_collection': False,
             'analysis': False,
@@ -264,7 +228,7 @@ def test_pipeline_integration():
             
             # Save draws to CSV
             for draw_date, numbers in draws:
-                save_draw_to_csv(draw_date, numbers)
+                handler.save_draw_to_csv(draw_date, numbers)
 
             # 2. Analysis
             print("\nStep 2: Performing analysis...")
@@ -274,10 +238,16 @@ def test_pipeline_integration():
 
             # 3. ML Prediction
             print("\nStep 3: Generating prediction...")
-            check_and_train_model()
-            train_and_predict()
-            pipeline_status['prediction'] = True
-            print("✓ Prediction generated")
+            predictions, probabilities, analysis = handler.handle_prediction_pipeline()
+            if predictions is not None:
+                pipeline_status['prediction'] = True
+                print("✓ Prediction generated")
+                
+                # Display prediction results
+                formatted_numbers = ','.join(map(str, predictions))
+                print(f"Predicted numbers: {formatted_numbers}")
+                if analysis and 'hot_numbers' in analysis:
+                    print(f"Hot numbers: {analysis['hot_numbers'][:10]}")
 
             # 4. Evaluation
             print("\nStep 4: Evaluating predictions...")
