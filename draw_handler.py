@@ -42,10 +42,13 @@ class DrawHandler:
             predictions, probabilities = self._run_prediction(processed_data, analysis_results)
             
             # 4. Results Handling
-            self.pipeline_status['stage'] = 'results_handling'
-            self._save_pipeline_results(predictions, probabilities, analysis_results)
-            
-            self.pipeline_status['success'] = True
+            if predictions is not None and probabilities is not None:
+                self.pipeline_status['stage'] = 'results_handling'
+                self._save_pipeline_results(predictions, probabilities, analysis_results)
+                self.pipeline_status['success'] = True
+            else:
+                raise ValueError("Prediction generation failed")
+                
             return predictions, probabilities, analysis_results
             
         except Exception as e:
@@ -75,15 +78,29 @@ class DrawHandler:
 
     def _run_prediction(self, data, analysis_results):
         """Run prediction with analysis integration"""
-        predictor = LotteryPredictor(numbers_range=(1, 80), numbers_to_draw=20)
-        model_base = self._get_latest_model()
-        
-        if model_base:
-            predictor.load_models(model_base)
-            number_cols = [f'number{i}' for i in range(1, 21)]
-            recent_draws = data.tail(5)[number_cols + ['date', 'day_of_week', 'month', 'day_of_year', 'days_since_first_draw']]
-            return predictor.predict(recent_draws)
-        return None, None
+        try:
+            predictor = LotteryPredictor(numbers_range=(1, 80), numbers_to_draw=20)
+            model_base = self._get_latest_model()
+            
+            if model_base:
+                predictor.load_models(model_base)
+                number_cols = [f'number{i}' for i in range(1, 21)]
+                recent_draws = data.tail(5)[number_cols + ['date', 'day_of_week', 'month', 'day_of_year', 'days_since_first_draw']]
+                
+                # Now get all three return values from predict
+                predictions, probabilities, analysis = predictor.predict(recent_draws)
+                
+                # Merge analysis_results with the new analysis
+                if analysis:
+                    analysis_results.update(analysis)
+                    
+                return predictions, probabilities
+                
+            return None, None
+            
+        except Exception as e:
+            print(f"Error in prediction run: {e}")
+            return None, None
 
     # Keep all existing functions unchanged
     def save_draw_to_csv(self, draw_date, draw_numbers, csv_file=None):
@@ -279,20 +296,33 @@ def get_ml_prediction(csv_file='C:\\Users\\MihaiNita\\OneDrive - Prime Batteries
 if __name__ == "__main__":
     handler = DrawHandler()
     
-    # Example usage of new pipeline
     try:
+        # First ensure models are trained
+        print("Checking/Training models...")
+        if handler.train_ml_models():
+            print("Models ready")
+        
+        # Generate prediction using pipeline
+        print("\nGenerating predictions...")
         predictions, probabilities, analysis = handler.handle_prediction_pipeline()
+        
         if predictions is not None:
-            print("\nPrediction Pipeline Results:")
+            print("\n=== Prediction Results ===")
             print(f"Predicted Numbers: {sorted(predictions)}")
-            print(f"Analysis Results: {analysis}")
+            
+            # Display probabilities for predicted numbers
+            print("\nProbabilities for predicted numbers:")
+            for num, prob in zip(sorted(predictions), 
+                               [probabilities[num-1] for num in predictions]):
+                print(f"Number {num}: {prob:.4f}")
+            
+            if analysis:
+                print("\n=== Analysis Results ===")
+                for key, value in analysis.items():
+                    if key != 'clusters':  # Skip clusters for cleaner output
+                        print(f"\n{key.replace('_', ' ').title()}:")
+                        print(value)
+                        
     except Exception as e:
-        print(f"Error in pipeline execution: {str(e)}")
+        print(f"\nError in pipeline execution: {str(e)}")
         print(f"Pipeline Status: {handler.pipeline_status}")
-    
-    # Original example usage remains available
-    draw_date = datetime.now().strftime('%H:%M %d-%m-%Y')
-    draw_numbers = np.random.choice(range(1, 81), 20, replace=False).tolist()
-    save_draw_to_csv(draw_date, draw_numbers)
-    train_ml_models()
-    get_ml_prediction()
