@@ -83,20 +83,35 @@ class DrawHandler:
             model_base = self._get_latest_model()
             
             if model_base:
-                predictor.load_models(model_base)
+                # Try loading models, if fails attempt training
+                if not predictor.load_models(model_base):
+                    print("Model loading failed, attempting to train new model...")
+                    if not self.train_ml_models():
+                        raise ValueError("Could not load or train models")
+                    model_base = self._get_latest_model()
+                    if not predictor.load_models(model_base):
+                        raise ValueError("Model loading failed after training")
+                
                 number_cols = [f'number{i}' for i in range(1, 21)]
                 recent_draws = data.tail(5)[number_cols + ['date', 'day_of_week', 'month', 'day_of_year', 'days_since_first_draw']]
                 
-                # Now get all three return values from predict
-                predictions, probabilities, analysis = predictor.predict(recent_draws)
+                # Get all three return values from predict
+                predicted_numbers, probabilities, analysis = predictor.predict(recent_draws)
                 
                 # Merge analysis_results with the new analysis
                 if analysis:
                     analysis_results.update(analysis)
                     
-                return predictions, probabilities
+                    # Add model performance metrics if available
+                    if predictor.training_status.get('prob_score') is not None:
+                        analysis_results['model_performance'] = {
+                            'probabilistic_model_score': predictor.training_status['prob_score'],
+                            'pattern_model_score': predictor.training_status['pattern_score']
+                        }
                 
-            return None, None
+                return predicted_numbers, probabilities
+                
+            raise ValueError("No valid model base found")
             
         except Exception as e:
             print(f"Error in prediction run: {e}")

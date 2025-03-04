@@ -18,23 +18,35 @@ def ensure_directories():
 
 def check_and_train_model():
     """Check if a trained model exists and train if needed using DrawHandler"""
-    handler = DrawHandler()
-    model_path = handler._get_latest_model()
-    
-    if not model_path:
-        print("No trained model found. Training new model...")
-        if handler.train_ml_models():
-            print("Model training completed successfully")
+    try:
+        handler = DrawHandler()
+        model_path = handler._get_latest_model()
+        
+        if not model_path:
+            print("No trained model found. Training new model...")
+            if handler.train_ml_models():
+                print("✓ Model training completed successfully")
+                return True
+            else:
+                print("✗ Model training failed")
+                return False
         else:
-            print("Warning: Model training may have encountered issues")
-    else:
-        # Verify that all required model files exist
-        model_files = [f"{model_path}_prob_model.pkl", f"{model_path}_pattern_model.pkl", f"{model_path}_scaler.pkl"]
-        if all(os.path.exists(file) for file in model_files):
-            print(f"Model found: {os.path.basename(model_path)}")
-        else:
-            print("Model files incomplete. Retraining model...")
-            handler.train_ml_models()
+            # Verify model files exist
+            model_files = [
+                f"{model_path}_prob_model.pkl",
+                f"{model_path}_pattern_model.pkl",
+                f"{model_path}_scaler.pkl"
+            ]
+            if all(os.path.exists(file) for file in model_files):
+                print(f"✓ Model found: {os.path.basename(model_path)}")
+                return True
+            else:
+                print("Model files incomplete. Attempting retraining...")
+                return handler.train_ml_models()
+                
+    except Exception as e:
+        print(f"Error checking/training model: {e}")
+        return False
 
 def load_data(file_path):
     if not os.path.exists(file_path):
@@ -105,41 +117,51 @@ def evaluate_numbers(historical_data):
 
 def train_and_predict():
     try:
-        handler = DrawHandler()  # Use DrawHandler instead of direct LotteryPredictor
+        handler = DrawHandler()
         
         # First ensure models are trained
         print("Checking/Training models...")
         if handler.train_ml_models():
             print("Models ready")
+        else:
+            raise Exception("Model training failed")
         
         # Generate prediction using pipeline
         print("\nGenerating predictions...")
         predictions, probabilities, analysis = handler.handle_prediction_pipeline()
         
         if predictions is not None:
-            formatted_numbers = ','.join(map(str, predictions))
+            # Format and display predictions
+            formatted_numbers = ','.join(map(str, sorted(predictions)))
             next_draw_time = get_next_draw_time(datetime.now())
-            print(f"Predicted numbers for the next draw at {next_draw_time.strftime('%H:%M %d-%m-%Y')}: {formatted_numbers}")
-            print(f"Prediction probabilities: {[probabilities[num - 1] for num in predictions if num <= len(probabilities)]}")
-
-            # Save predictions
-            predictions_file = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\versiuni_de_care_nu_ma_ating\\Versiune1.4\\data\\processed\\predictions.csv'
-            handler.save_predictions_to_csv(predictions, probabilities, next_draw_time.strftime('%Y-%m-%d %H:%M:%S'), predictions_file)
+            print(f"\nPredicted numbers for next draw at {next_draw_time.strftime('%H:%M %d-%m-%Y')}:")
+            print(f"Numbers: {formatted_numbers}")
             
-            # Optionally add top 4 numbers if still needed
+            # Display probabilities in a readable format
+            print("\nProbabilities for each predicted number:")
+            for num, prob in zip(sorted(predictions), 
+                               [probabilities[num - 1] for num in predictions]):
+                print(f"Number {num}: {prob:.4f}")
+
+            # Save predictions using handler
+            predictions_file = os.path.join(handler.predictions_dir, 'predictions.csv')
+            handler.save_predictions_to_csv(predictions, probabilities, 
+                                         next_draw_time.strftime('%Y-%m-%d %H:%M:%S'))
+            
+            # Handle top 4 numbers if available
             if analysis and 'hot_numbers' in analysis:
                 top_4_numbers = analysis['hot_numbers'][:4]
-                top_4_file_path = r'C:\Users\MihaiNita\OneDrive - Prime Batteries\Desktop\proiectnow\Versiune1.4\data\processed\top_4.xlsx'
+                top_4_file_path = os.path.join(handler.predictions_dir, 'top_4.xlsx')
                 save_top_4_numbers_to_excel(top_4_numbers, top_4_file_path)
-                print(f"Top 4 numbers based on analysis: {','.join(map(str, top_4_numbers))}")
+                print(f"\nTop 4 numbers based on analysis: {','.join(map(str, top_4_numbers))}")
             
             return predictions, probabilities, analysis
         else:
-            print("Failed to generate predictions")
+            print("\nFailed to generate predictions")
             return None, None, None
             
     except Exception as e:
-        print(f"\nError: {str(e)}")
+        print(f"\nError in prediction process: {str(e)}")
         return None, None, None
 
 def perform_complete_analysis(draws):
@@ -300,9 +322,16 @@ def main():
                     print("\nFailed to perform complete analysis")
             
             elif choice == '9':
-                check_and_train_model()
-                print("\nGenerating ML prediction for next draw...")
-                train_and_predict()
+                if check_and_train_model():
+                    print("\nGenerating ML prediction for next draw...")
+                    predictions, probabilities, analysis = train_and_predict()
+                    if predictions is not None:
+                        print("\nPrediction process completed successfully!")
+                        # Results are already displayed in train_and_predict
+                    else:
+                        print("\nPrediction generation failed after model training")
+                else:
+                    print("\nFailed to prepare model for predictions")
             
             elif choice == '10':
                 evaluator = PredictionEvaluator()
