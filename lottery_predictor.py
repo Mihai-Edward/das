@@ -88,6 +88,23 @@ class LotteryPredictor:
                 invalid_numbers = prepared_data[~prepared_data[col].between(1, 80)]
                 if not invalid_numbers.empty:
                     raise ValueError(f"Invalid numbers found in column {col}")
+                    
+            # Add date-based features
+            if 'date' in prepared_data.columns:
+                prepared_data['day_of_week'] = prepared_data['date'].dt.dayofweek
+                prepared_data['month'] = prepared_data['date'].dt.month
+                prepared_data['day_of_year'] = prepared_data['date'].dt.dayofyear
+                prepared_data['days_since_first_draw'] = (
+                    prepared_data['date'] - prepared_data['date'].min()
+                ).dt.days
+                
+                # Store additional features in pipeline data
+                self.pipeline_data['date_features'] = {
+                    'day_of_week': prepared_data['day_of_week'].tolist(),
+                    'month': prepared_data['month'].tolist(),
+                    'day_of_year': prepared_data['day_of_year'].tolist(),
+                    'days_since_first_draw': prepared_data['days_since_first_draw'].tolist()
+                }
             
             # Store in pipeline data for potential later use
             self.pipeline_data['prepared_data'] = prepared_data
@@ -317,6 +334,31 @@ class LotteryPredictor:
             print(f"Error in clustering: {e}")
             return None
 
+    def get_analysis_features(self, data):
+        """Get enhanced analysis features from TrainPredictor"""
+        try:
+            draws = [(row['date'].strftime('%H:%M %d-%m-%Y'), 
+                     [row[f'number{i}'] for i in range(1, 21)]) 
+                    for _, row in data.iterrows()]
+            
+            analyzer = DataAnalysis(draws)
+            analysis_features = {
+                'frequency': analyzer.count_frequency(),
+                'hot_cold': analyzer.hot_and_cold_numbers(),
+                'common_pairs': analyzer.find_common_pairs(),
+                'range_analysis': analyzer.number_range_analysis(),
+                'sequences': self.extract_sequence_patterns(data),
+                'clusters': self.extract_clusters(data)
+            }
+            
+            # Store in pipeline data
+            self.pipeline_data['analysis_features'] = analysis_features
+            return analysis_features
+            
+        except Exception as e:
+            print(f"Error getting analysis features: {e}")
+            return {}
+
     def _create_enhanced_features(self, data):
         """Create enhanced feature vector combining all features"""
         print("\nGenerating enhanced features...")
@@ -400,7 +442,7 @@ class LotteryPredictor:
             return False
 
     def load_models(self, path_prefix=None):
-        """Load models with validation"""
+        """Enhanced model loading with validation from ModelLoader"""
         try:
             if path_prefix is None:
                 # Get latest model
@@ -409,14 +451,25 @@ class LotteryPredictor:
                     raise FileNotFoundError("No models found")
                 path_prefix = max(model_files, key=os.path.getctime).replace('_prob_model.pkl', '')
             
+            # Validate required files exist
+            required_files = ['_prob_model.pkl', '_pattern_model.pkl', '_scaler.pkl']
+            for file in required_files:
+                if not os.path.exists(f"{path_prefix}{file}"):
+                    raise FileNotFoundError(f"Missing model file: {file}")
+            
+            # Load models
             self.probabilistic_model = joblib.load(f'{path_prefix}_prob_model.pkl')
             self.pattern_model = joblib.load(f'{path_prefix}_pattern_model.pkl')
             self.scaler = joblib.load(f'{path_prefix}_scaler.pkl')
             
-            self.training_status['model_loaded'] = True
-            self.training_status['timestamp'] = datetime.fromtimestamp(
-                os.path.getctime(f'{path_prefix}_prob_model.pkl')
-            )
+            # Update status with feature information
+            self.training_status.update({
+                'model_loaded': True,
+                'timestamp': datetime.fromtimestamp(
+                    os.path.getctime(f'{path_prefix}_prob_model.pkl')
+                ),
+                'features': getattr(self.probabilistic_model, 'feature_names_in_', None)
+            })
             
             return True
             
@@ -426,7 +479,7 @@ class LotteryPredictor:
             return False
 
     def train_and_predict(self, historical_data=None, recent_draws=None):
-        """Main interface for training and prediction"""
+        """Enhanced prediction generation with analysis integration"""
         try:
             if historical_data is None:
                 historical_data = self.load_data()
@@ -438,11 +491,28 @@ class LotteryPredictor:
             if not self.training_status['model_loaded']:
                 print("\nTraining new model...")
                 X, y = self.prepare_data(historical_data)
+                
+                # Add analysis features
+                analysis_features = self.get_analysis_features(historical_data)
+                
+                # Train models
                 self.train_models(X, y)
                 self.save_models()
             
-            # Generate prediction
-            return self.predict(recent_draws)
+            # Generate prediction with analysis context
+            predicted_numbers, probabilities, analysis_context = self.predict(recent_draws)
+            
+            # Get next draw time and save prediction
+            next_draw_time = datetime.now().replace(
+                minute=(datetime.now().minute // 5 + 1) * 5,
+                second=0, 
+                microsecond=0
+            )
+            
+            if predicted_numbers is not None:
+                self.save_prediction_to_csv(predicted_numbers, probabilities)
+            
+            return predicted_numbers, probabilities, analysis_context
             
         except Exception as e:
             print(f"Error in train_and_predict: {e}")
