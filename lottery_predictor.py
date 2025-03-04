@@ -57,16 +57,43 @@ class LotteryPredictor:
         self.pipeline_data = {}
     
     def _prepare_pipeline_data(self, data):
-        """Prepare input data for the prediction pipeline"""
-        print("\nPreparing pipeline data...")
+        """First pipeline stage: Prepare and validate input data"""
+        print("\nPreparing data for prediction pipeline...")
         try:
-            # Ensure data is properly formatted
-            if isinstance(data, pd.DataFrame):
-                self.pipeline_data['input_data'] = data
-                return data
-            else:
-                print("Warning: Input data is not a DataFrame")
-                return data
+            # Ensure we have a DataFrame
+            if not isinstance(data, pd.DataFrame):
+                raise ValueError("Input must be a pandas DataFrame")
+                
+            # Ensure we have the required number of rows (5 recent draws)
+            if len(data) < 5:
+                raise ValueError("Need at least 5 recent draws for prediction")
+                
+            # Clean the data
+            prepared_data = self.clean_data(data)
+            if prepared_data is None or len(prepared_data) < 5:
+                raise ValueError("Data cleaning resulted in insufficient data")
+                
+            # Ensure all required columns exist
+            required_cols = ['date'] + [f'number{i+1}' for i in range(20)]
+            missing_cols = [col for col in required_cols if col not in prepared_data.columns]
+            if missing_cols:
+                raise ValueError(f"Missing required columns: {missing_cols}")
+                
+            # Sort by date and get most recent 5 draws
+            prepared_data = prepared_data.sort_values('date').tail(5)
+            
+            # Validate number ranges
+            number_cols = [f'number{i+1}' for i in range(20)]
+            for col in number_cols:
+                invalid_numbers = prepared_data[~prepared_data[col].between(1, 80)]
+                if not invalid_numbers.empty:
+                    raise ValueError(f"Invalid numbers found in column {col}")
+            
+            # Store in pipeline data for potential later use
+            self.pipeline_data['prepared_data'] = prepared_data
+            print("Data preparation completed successfully")
+            return prepared_data
+            
         except Exception as e:
             print(f"Error in data preparation: {e}")
             return None
