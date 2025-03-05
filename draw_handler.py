@@ -7,6 +7,8 @@ from lottery_predictor import LotteryPredictor
 from collections import Counter
 from sklearn.cluster import KMeans
 from data_analysis import DataAnalysis
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.paths import PATHS, ensure_directories
 from data_collector_selenium import KinoDataCollector
 from prediction_evaluator import PredictionEvaluator
@@ -93,11 +95,20 @@ class DrawHandler:
             
             # Load historical data
             historical_data = self._load_historical_data()
-            if historical_data is None:
-                raise ValueError("No historical data available for training")
+            if historical_data is None or len(historical_data) < 6:  # Need at least 6 draws
+                raise ValueError("Insufficient historical data for training")
 
-            # Train models using predictor
-            training_success = self.predictor.train_models(historical_data, force_retrain)
+            print(f"Loaded {len(historical_data)} draws for training")
+                
+            # Prepare data for training
+            features, labels = self.predictor.prepare_data(historical_data)
+            if features is None or labels is None or len(features) == 0:
+                raise ValueError("Failed to prepare training data")
+                
+            print(f"Prepared features shape: {features.shape}")
+
+            # Train models using predictor with prepared data
+            training_success = self.predictor.train_models(features, labels)
             
             if training_success:
                 self.pipeline_status['success'] = True

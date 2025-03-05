@@ -8,8 +8,10 @@ from datetime import datetime
 import pytz
 import time
 import pandas as pd
-import os
 from bs4 import BeautifulSoup
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.paths import PATHS, ensure_directories
 
 class KinoDataCollector:

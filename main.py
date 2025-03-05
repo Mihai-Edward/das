@@ -10,6 +10,7 @@ from data_analysis import DataAnalysis
 from draw_handler import DrawHandler
 from prediction_evaluator import PredictionEvaluator
 import joblib
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.paths import PATHS, ensure_directories
 
 def initialize_system():

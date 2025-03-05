@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 import os
 import glob
 from sklearn.model_selection import train_test_split
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.paths import PATHS, ensure_directories
 
 class LotteryPredictor:
@@ -431,17 +433,28 @@ class LotteryPredictor:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 path_prefix = os.path.join(self.models_dir, f'lottery_predictor_{timestamp}')
             
-            os.makedirs(os.path.dirname(path_prefix), exist_ok=True)
+            # Ensure models directory exists
+            os.makedirs(self.models_dir, exist_ok=True)
             
-            joblib.dump(self.probabilistic_model, f'{path_prefix}_prob_model.pkl')
-            joblib.dump(self.pattern_model, f'{path_prefix}_pattern_model.pkl')
-            joblib.dump(self.scaler, f'{path_prefix}_scaler.pkl')
+            # Save models
+            model_files = {
+                '_prob_model.pkl': self.probabilistic_model,
+                '_pattern_model.pkl': self.pattern_model,
+                '_scaler.pkl': self.scaler
+            }
             
-            # Update timestamp file
-            timestamp_file = os.path.join(os.path.dirname(self.models_dir), 'model_timestamp.txt')
+            # Save each model file
+            for suffix, model in model_files.items():
+                model_path = f'{path_prefix}{suffix}'
+                joblib.dump(model, model_path)
+                print(f"Saved model: {os.path.basename(model_path)}")
+            
+            # Update timestamp file - now in the models directory
+            timestamp_file = os.path.join(self.models_dir, 'model_timestamp.txt')
             with open(timestamp_file, 'w') as f:
-                f.write(path_prefix.split('_')[-1])
+                f.write(timestamp)
             
+            print(f"Models saved successfully in {self.models_dir}")
             return True
             
         except Exception as e:
@@ -449,27 +462,39 @@ class LotteryPredictor:
             return False
 
     def load_models(self, path_prefix=None):
-        """Enhanced model loading with validation from ModelLoader"""
+        """Enhanced model loading with validation"""
         try:
             if path_prefix is None:
-                # Get latest model
-                model_files = glob.glob(os.path.join(self.models_dir, "*_prob_model.pkl"))
-                if not model_files:
-                    raise FileNotFoundError("No models found")
-                path_prefix = max(model_files, key=os.path.getctime).replace('_prob_model.pkl', '')
+                # First try to get path from timestamp file
+                timestamp_file = os.path.join(self.models_dir, 'model_timestamp.txt')
+                if os.path.exists(timestamp_file):
+                    with open(timestamp_file, 'r') as f:
+                        timestamp = f.read().strip()
+                        path_prefix = os.path.join(self.models_dir, f'lottery_predictor_{timestamp}')
+                else:
+                    # Fallback to finding latest model file
+                    model_files = glob.glob(os.path.join(self.models_dir, "*_prob_model.pkl"))
+                    if not model_files:
+                        raise FileNotFoundError("No models found in directory")
+                    path_prefix = max(model_files, key=os.path.getctime).replace('_prob_model.pkl', '')
             
-            # Validate required files exist
+            # Validate all required files exist
             required_files = ['_prob_model.pkl', '_pattern_model.pkl', '_scaler.pkl']
+            missing_files = []
             for file in required_files:
                 if not os.path.exists(f"{path_prefix}{file}"):
-                    raise FileNotFoundError(f"Missing model file: {file}")
+                    missing_files.append(file)
+            
+            if missing_files:
+                raise FileNotFoundError(f"Missing model files: {', '.join(missing_files)}")
             
             # Load models
+            print(f"Loading models from: {path_prefix}")
             self.probabilistic_model = joblib.load(f'{path_prefix}_prob_model.pkl')
             self.pattern_model = joblib.load(f'{path_prefix}_pattern_model.pkl')
             self.scaler = joblib.load(f'{path_prefix}_scaler.pkl')
             
-            # Update status with feature information
+            # Update status
             self.training_status.update({
                 'model_loaded': True,
                 'timestamp': datetime.fromtimestamp(
@@ -478,6 +503,7 @@ class LotteryPredictor:
                 'features': getattr(self.probabilistic_model, 'feature_names_in_', None)
             })
             
+            print("Models loaded successfully")
             return True
             
         except Exception as e:
@@ -525,31 +551,50 @@ class LotteryPredictor:
             print(f"Error in train_and_predict: {e}")
             return None, None, None
 
-    def train_models(self, X_train, y_train):
-        """Train both models with test split"""
+    def train_models(self, features, labels):
+        """Train both models with validation"""
         try:
+            print("\nStarting model training...")
+            if features is None or labels is None:
+                raise ValueError("Features or labels are None")
+                
+            if len(features) == 0 or len(labels) == 0:
+                raise ValueError("Empty features or labels")
+                
+            print(f"Training data: {len(features)} samples")
+            
             # Add train-test split
+            if len(features) < 2:
+                raise ValueError("Insufficient data for training")
+                
             X_train, X_test, y_train, y_test = train_test_split(
-                X_train, y_train, test_size=0.2, random_state=42
+                features, labels, test_size=0.2, random_state=42
             )
             
             # Scale features
             X_train_scaled = self.scaler.fit_transform(X_train)
             X_test_scaled = self.scaler.transform(X_test)
             
-            # Train models
+            print("Training probabilistic model...")
             self.probabilistic_model.fit(X_train_scaled, y_train)
-            self.pattern_model.fit(X_train_scaled, y_train)
+            prob_score = self.probabilistic_model.score(X_test_scaled, y_test)
             
-            # Add model evaluation
+            print("Training pattern model...")
+            self.pattern_model.fit(X_train_scaled, y_train)
+            pattern_score = self.pattern_model.score(X_test_scaled, y_test)
+            
+            # Update training status
             self.training_status.update({
                 'success': True,
                 'model_loaded': True,
                 'timestamp': datetime.now(),
-                'prob_score': self.probabilistic_model.score(X_test_scaled, y_test),
-                'pattern_score': self.pattern_model.score(X_test_scaled, y_test)
+                'prob_score': prob_score,
+                'pattern_score': pattern_score
             })
+            
+            print(f"Models trained successfully. Scores - Probabilistic: {prob_score:.4f}, Pattern: {pattern_score:.4f}")
             return True
+            
         except Exception as e:
             print(f"Error training models: {e}")
             self.training_status.update({

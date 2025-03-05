@@ -1,9 +1,11 @@
 from collections import Counter
 from itertools import combinations
 import pandas as pd
-import os
 from sklearn.cluster import KMeans
 import numpy as np
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.paths import PATHS, ensure_directories
 
 class DataAnalysis:
