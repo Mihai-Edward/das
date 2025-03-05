@@ -46,7 +46,7 @@ class LotteryPredictor:
         
         # Neural network with optimized architecture
         self.pattern_model = MLPClassifier(
-            hidden_layer_sizes=(256, 128, 80),  # Optimized for lottery number prediction
+            hidden_layer_sizes=(256, 128, 80),  # Optimized for lottery prediction
             activation='relu',
             solver='adam',
             alpha=0.0001,  # L2 regularization parameter
@@ -58,7 +58,7 @@ class LotteryPredictor:
             random_state=42,
             early_stopping=True,  # Enable early stopping
             validation_fraction=0.1,  # Use 10% of training data for validation
-            n_iter_no_change=10  # Number of iterations with no improvement to wait before stopping
+            n_iter_no_change=10  # Number of iterations with no improvement
         )
         
         # Initialize analysis components
@@ -82,6 +82,9 @@ class LotteryPredictor:
         
         # Initialize pipeline data storage
         self.pipeline_data = {}
+        
+        # Initialize pipeline stages - Added this line
+        self._initialize_pipeline()
         
         print(f"\nInitialized LotteryPredictor:")
         print(f"- Number range: {numbers_range}")
@@ -767,24 +770,77 @@ class LotteryPredictor:
     def predict(self, recent_draws):
         """Enhanced prediction with pipeline execution"""
         try:
+            # Ensure pipeline is initialized
+            if not hasattr(self, 'pipeline_stages'):
+                self._initialize_pipeline()
+            
+            # Validate input data
+            if recent_draws is None:
+                raise ValueError("No input data provided for prediction")
+                
+            # Initialize pipeline tracking
+            pipeline_tracking = {
+                'start_time': datetime.now(),
+                'stages_completed': [],
+                'current_stage': None,
+                'error': None
+            }
+                
             # Run prediction pipeline
             result = recent_draws
             for stage_name, stage_func in self.pipeline_stages.items():
                 print(f"\nExecuting pipeline stage: {stage_name}")
-                result = stage_func(result)
+                pipeline_tracking['current_stage'] = stage_name
                 
+                # Execute stage with timing
+                stage_start = datetime.now()
+                result = stage_func(result)
+                stage_duration = (datetime.now() - stage_start).total_seconds()
+                
+                # Validate stage result
                 if result is None:
                     raise ValueError(f"Pipeline stage {stage_name} failed")
+                    
+                # Update tracking
+                pipeline_tracking['stages_completed'].append({
+                    'stage': stage_name,
+                    'duration': stage_duration,
+                    'success': True
+                })
+                print(f"Stage {stage_name} completed in {stage_duration:.2f} seconds")
             
             # Get final predictions and analysis
-            final_numbers = self.pipeline_data['final_prediction']
-            probabilities = self.pipeline_data['probabilities']
+            final_numbers = self.pipeline_data.get('final_prediction')
+            probabilities = self.pipeline_data.get('probabilities')
             analysis_context = self.pipeline_data.get('analysis_context', {})
+            
+            # Validate final results
+            if final_numbers is None or len(final_numbers) != self.numbers_to_draw:
+                raise ValueError("Invalid prediction results")
+                
+            # Store pipeline execution metadata
+            self.pipeline_data['pipeline_execution'] = {
+                'execution_time': (datetime.now() - pipeline_tracking['start_time']).total_seconds(),
+                'stages': pipeline_tracking['stages_completed'],
+                'timestamp': datetime.now()
+            }
+            
+            print("\nPipeline execution completed successfully")
+            print(f"Total execution time: {self.pipeline_data['pipeline_execution']['execution_time']:.2f} seconds")
             
             return final_numbers, probabilities, analysis_context
             
         except Exception as e:
-            print(f"Error in prediction: {e}")
+            error_msg = f"Error in prediction pipeline: {str(e)}"
+            print(error_msg)
+            
+            # Update pipeline data with error information
+            self.pipeline_data['error'] = {
+                'message': error_msg,
+                'stage': pipeline_tracking.get('current_stage'),
+                'timestamp': datetime.now()
+            }
+            
             return None, None, None
 
     def save_prediction_to_csv(self, predicted_numbers, probabilities):
