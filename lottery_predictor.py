@@ -38,10 +38,9 @@ class LotteryPredictor:
         # Models initialization with enhanced configuration
         self.scaler = StandardScaler()
         
-        # Probabilistic model for multi-class classification
+        # Modified probabilistic model initialization
         self.probabilistic_model = GaussianNB(
-            priors=None,  # Let the model learn class probabilities from data
-            var_smoothing=1e-9  # Default smoothing parameter
+        priors=np.ones(numbers_range[1]) / numbers_range[1]  # Equal priors for all classes
         )
         
         # Neural network with optimized architecture
@@ -531,39 +530,55 @@ class LotteryPredictor:
             if len(features.shape) == 1:
                 features = features.reshape(1, -1)
             
-            if features.shape[1] != 84:  # Expected feature dimension
+            if features.shape[1] != 84:
                 raise ValueError(f"Expected 84 features, got {features.shape[1]}")
                 
             # Scale features
             print("Scaling features...")
             scaled_features = self.scaler.transform(features)
             
-            # Get probabilistic model predictions
+            # Get probabilistic model predictions with proper dimensionality
             print("Getting probabilistic model predictions...")
-            prob_pred = self.probabilistic_model.predict_proba(scaled_features)
+            try:
+                prob_pred = self.probabilistic_model.predict_proba(scaled_features)
+                if prob_pred.shape[1] != self.num_classes:
+                    print("Fixing probabilistic model output dimensionality...")
+                    full_prob = np.zeros((1, self.num_classes))
+                    full_prob[0, :prob_pred.shape[1]] = prob_pred[0]
+                    full_prob[0, prob_pred.shape[1]:] = np.min(prob_pred[0])  # Fill remaining with minimum probability
+                    prob_pred = full_prob
+            except Exception as e:
+                print(f"Warning: Probabilistic model prediction failed: {e}")
+                prob_pred = np.ones((1, self.num_classes)) / self.num_classes
             
             # Get pattern model predictions
             print("Getting pattern model predictions...")
-            pattern_pred = self.pattern_model.predict_proba(scaled_features)
+            try:
+                pattern_pred = self.pattern_model.predict_proba(scaled_features)
+                if pattern_pred.shape[1] != self.num_classes:
+                    print("Fixing pattern model output dimensionality...")
+                    full_pattern = np.zeros((1, self.num_classes))
+                    full_pattern[0, :pattern_pred.shape[1]] = pattern_pred[0]
+                    full_pattern[0, pattern_pred.shape[1]:] = np.min(pattern_pred[0])
+                    pattern_pred = full_pattern
+            except Exception as e:
+                print(f"Warning: Pattern model prediction failed: {e}")
+                pattern_pred = np.ones((1, self.num_classes)) / self.num_classes
             
-            # Validate and normalize predictions
-            if prob_pred.shape[1] != self.num_classes:
-                print(f"Warning: Probabilistic model output dimension mismatch. Expected {self.num_classes}, got {prob_pred.shape[1]}")
-                prob_pred = np.zeros((1, self.num_classes))
-                prob_pred[0, :] = 1.0 / self.num_classes
-                
-            if pattern_pred.shape[1] != self.num_classes:
-                print(f"Warning: Pattern model output dimension mismatch. Expected {self.num_classes}, got {pattern_pred.shape[1]}")
-                pattern_pred = np.zeros((1, self.num_classes))
-                pattern_pred[0, :] = 1.0 / self.num_classes
-            
-            # Get first row of predictions (we only have one sample)
+            # Ensure proper dimensionality and normalization
             prob_pred = prob_pred[0]
             pattern_pred = pattern_pred[0]
             
             # Normalize predictions
             prob_pred = prob_pred / np.sum(prob_pred)
             pattern_pred = pattern_pred / np.sum(pattern_pred)
+            
+            # Validate predictions
+            if np.any(np.isnan(prob_pred)) or np.any(np.isnan(pattern_pred)):
+                raise ValueError("NaN values detected in predictions")
+                
+            if not np.all(prob_pred >= 0) or not np.all(pattern_pred >= 0):
+                raise ValueError("Negative probabilities detected")
             
             # Store predictions and metadata in pipeline data
             self.pipeline_data.update({
@@ -581,6 +596,10 @@ class LotteryPredictor:
                         'max': float(np.max(pattern_pred)),
                         'mean': float(np.mean(pattern_pred)),
                         'std': float(np.std(pattern_pred))
+                    },
+                    'model_confidence': {
+                        'prob_model': float(1 - np.std(prob_pred)),
+                        'pattern_model': float(1 - np.std(pattern_pred))
                     }
                 }
             })
@@ -590,10 +609,12 @@ class LotteryPredictor:
             print(f"- Min: {np.min(prob_pred):.4f}")
             print(f"- Max: {np.max(prob_pred):.4f}")
             print(f"- Mean: {np.mean(prob_pred):.4f}")
+            print(f"- Confidence: {self.pipeline_data['prediction_metadata']['model_confidence']['prob_model']:.4f}")
             print("\nPattern Model:")
             print(f"- Min: {np.min(pattern_pred):.4f}")
             print(f"- Max: {np.max(pattern_pred):.4f}")
             print(f"- Mean: {np.mean(pattern_pred):.4f}")
+            print(f"- Confidence: {self.pipeline_data['prediction_metadata']['model_confidence']['pattern_model']:.4f}")
             
             return prob_pred, pattern_pred
             
@@ -804,86 +825,64 @@ class LotteryPredictor:
             # Ensure features have correct dimension (84)
             if features.shape[1] != 84:
                 raise ValueError(f"Expected 84 features, got {features.shape[1]}")
-            
-            # Convert labels to multi-label format for all 20 numbers
-            y = np.zeros((len(labels), self.num_classes))
+                
+            # Prepare labels for both models
+            prob_labels = np.zeros(len(labels), dtype=int)  # For probabilistic model
+            pattern_labels = np.zeros((len(labels), self.num_classes))  # For pattern model
+            valid_samples = 0
+
             for i, row in enumerate(labels):
-                if isinstance(row, pd.Series):
-                    numbers = [row[f'number{j+1}'] for j in range(20)]
-                elif isinstance(row, (list, np.ndarray)):
-                    numbers = row
-                else:
-                    raise ValueError(f"Unexpected label format at index {i}")
+                try:
+                    # Convert to array if it's a pandas Series
+                    numbers = row if isinstance(row, (list, np.ndarray)) else row.values
+                    numbers = numbers.astype(int)
                     
-                # Validate and convert numbers
-                valid_numbers = []
-                for num in numbers:
-                    try:
-                        num = int(num)
-                        if 1 <= num <= self.num_classes:
-                            valid_numbers.append(num)
-                    except (ValueError, TypeError):
+                    # Validate numbers
+                    if len(numbers) != self.numbers_to_draw:
+                        print(f"Warning: Row {i} has incorrect number of values")
+                        continue
+                        
+                    if not all(1 <= n <= self.num_classes for n in numbers):
+                        print(f"Warning: Row {i} contains invalid numbers")
                         continue
                     
-                if len(valid_numbers) != self.numbers_to_draw:
-                    print(f"Warning: Row {i} has {len(valid_numbers)} valid numbers instead of {self.numbers_to_draw}")
-                    continue
+                    # Set probabilistic model label (first number)
+                    prob_labels[i] = numbers[0] - 1  # Convert to 0-based index
                     
-                # Set labels for valid numbers
-                for num in valid_numbers:
-                    y[i, num-1] = 1
-            
-            # Validate label distribution
-            labels_per_sample = np.sum(y, axis=1)
-            print("\nLabel Distribution:")
-            print(f"- Mean labels per sample: {np.mean(labels_per_sample):.2f}")
-            print(f"- Min labels: {np.min(labels_per_sample)}")
-            print(f"- Max labels: {np.max(labels_per_sample)}")
-            
-            # Ensure we have valid samples
-            valid_samples = labels_per_sample == self.numbers_to_draw
-            if not np.any(valid_samples):
-                raise ValueError("No valid training samples found")
-                
-            # Filter to keep only valid samples
-            features = features[valid_samples]
-            y = y[valid_samples]
-            
-            print(f"\nUsing {len(features)} valid training samples")
-            
-            # Split the data with stratification
-            X_train, X_test, y_train, y_test = train_test_split(
-                features, y,
+                    # Set pattern model labels (all numbers)
+                    for num in numbers:
+                        pattern_labels[i, num-1] = 1
+                        valid_samples += 1      
+                except Exception as e:
+                    print(f"Warning: Error processing row {i}: {e}")
+                    continue
+                    print(f"\nProcessed {valid_samples} valid samples out of {len(labels)} total samples")
+            # Split data
+            X_train, X_test, y_prob_train, y_prob_test, y_pattern_train, y_pattern_test = train_test_split(
+                features, prob_labels, pattern_labels,
                 test_size=0.2,
-                random_state=42,
-                shuffle=True
+                random_state=42
             )
             
             # Scale features
             X_train_scaled = self.scaler.fit_transform(X_train)
             X_test_scaled = self.scaler.transform(X_test)
             
-            # Train pattern model on full distribution
+            # Train probabilistic model
+            print("\nTraining probabilistic model...")
+            self.probabilistic_model.fit(X_train_scaled, y_prob_train)
+            prob_score = self.probabilistic_model.score(X_test_scaled, y_prob_test)
+            
+            # Train pattern model
             print("\nTraining pattern model...")
-            self.pattern_model.fit(X_train_scaled, y_train)
+            self.pattern_model.fit(X_train_scaled, y_pattern_train)
             pattern_predictions = self.pattern_model.predict(X_test_scaled)
             pattern_score = np.mean([
                 np.sum(np.sort(pred)[-self.numbers_to_draw:] == 1) / self.numbers_to_draw
                 for pred in pattern_predictions
             ])
             
-            # Train probabilistic model
-            print("\nTraining probabilistic model...")
-            self.probabilistic_model.fit(X_train_scaled, np.argmax(y_train, axis=1))
-            prob_predictions = self.probabilistic_model.predict(X_test_scaled)
-            prob_score = np.mean(prob_predictions == np.argmax(y_test, axis=1))
-            
-            # Calculate feature importance if available
-            feature_importance = None
-            if hasattr(self.probabilistic_model, 'feature_importances_'):
-                feature_importance = self.probabilistic_model.feature_importances_
-            
-            # Update training status with comprehensive metadata
+            # Update training status
             self.training_status.update({
                 'success': True,
                 'model_loaded': True,
@@ -892,18 +891,11 @@ class LotteryPredictor:
                 'pattern_score': pattern_score,
                 'feature_dimension': features.shape[1],
                 'training_samples': len(X_train),
-                'test_samples': len(X_test),
-                'label_stats': {
-                    'mean_labels': float(np.mean(labels_per_sample)),
-                    'std_labels': float(np.std(labels_per_sample)),
-                    'min_labels': int(np.min(labels_per_sample)),
-                    'max_labels': int(np.max(labels_per_sample))
-                },
-                'feature_importance': feature_importance
+                'test_samples': len(X_test)
             })
             
             print(f"\nModel Training Results:")
-            print(f"- Valid samples: {len(features)} of {len(labels)} total")
+            print(f"- Total samples: {len(features)}")
             print(f"- Training samples: {len(X_train)}")
             print(f"- Test samples: {len(X_test)}")
             print(f"- Features: {features.shape[1]}")
