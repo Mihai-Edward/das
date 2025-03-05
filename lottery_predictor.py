@@ -828,7 +828,7 @@ class LotteryPredictor:
                 
             # Prepare labels for both models
             prob_labels = np.zeros(len(labels), dtype=int)  # For probabilistic model
-            pattern_labels = np.zeros((len(labels), self.num_classes))  # For pattern model
+            pattern_labels = np.zeros((len(labels), 80))  # For pattern model - explicitly use 80
             valid_samples = 0
 
             for i, row in enumerate(labels):
@@ -842,7 +842,7 @@ class LotteryPredictor:
                         print(f"Warning: Row {i} has incorrect number of values")
                         continue
                         
-                    if not all(1 <= n <= self.num_classes for n in numbers):
+                    if not all(1 <= n <= 80 for n in numbers):  # Explicitly check for 1-80 range
                         print(f"Warning: Row {i} contains invalid numbers")
                         continue
                     
@@ -857,14 +857,19 @@ class LotteryPredictor:
                     print(f"Warning: Error processing row {i}: {e}")
                     continue
             
+            print(f"\nProcessed {valid_samples} valid samples out of {len(labels)} total samples")
+            
+            if valid_samples < 10:  # Minimum samples needed for meaningful training
+                raise ValueError(f"Insufficient valid samples: {valid_samples}")
+            
             # Filter out rows with all zeros
             valid_mask = np.any(pattern_labels != 0, axis=1)
             features = features[valid_mask]
             prob_labels = prob_labels[valid_mask]
             pattern_labels = pattern_labels[valid_mask]
 
-            # Initialize priors for probabilistic model
-            class_counts = np.bincount(prob_labels, minlength=80)
+            # Initialize probabilistic model priors
+            class_counts = np.bincount(prob_labels, minlength=80)  # Ensure 80 classes
             priors = class_counts / class_counts.sum()
             self.probabilistic_model.priors = priors
 
@@ -875,7 +880,7 @@ class LotteryPredictor:
                 random_state=42,
                 shuffle=True
             )
-
+        
             # Split pattern labels using same indices
             _, _, y_pattern_train, y_pattern_test = train_test_split(
                 features, pattern_labels,
@@ -911,11 +916,13 @@ class LotteryPredictor:
                 'pattern_score': pattern_score,
                 'feature_dimension': features.shape[1],
                 'training_samples': len(X_train),
-                'test_samples': len(X_test)
+                'test_samples': len(X_test),
+                'valid_samples': valid_samples
             })
             
             print(f"\nModel Training Results:")
             print(f"- Total samples: {len(features)}")
+            print(f"- Valid samples: {valid_samples}")
             print(f"- Training samples: {len(X_train)}")
             print(f"- Test samples: {len(X_test)}")
             print(f"- Features: {features.shape[1]}")
