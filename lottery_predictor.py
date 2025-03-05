@@ -17,9 +17,17 @@ from config.paths import PATHS, ensure_directories
 
 class LotteryPredictor:
     def __init__(self, numbers_range=(1, 80), numbers_to_draw=20):
-        # Core settings
+        """Initialize LotteryPredictor with enhanced model configuration"""
+        # Validate input parameters
+        if not isinstance(numbers_range, tuple) or len(numbers_range) != 2:
+            raise ValueError("numbers_range must be a tuple of (min, max)")
+        if not isinstance(numbers_to_draw, int) or numbers_to_draw <= 0:
+            raise ValueError("numbers_to_draw must be a positive integer")
+            
+        # Core settings with validation
         self.numbers_range = numbers_range
         self.numbers_to_draw = numbers_to_draw
+        self.num_classes = numbers_range[1] - numbers_range[0] + 1
         
         # Initialize paths using config
         ensure_directories()
@@ -27,18 +35,34 @@ class LotteryPredictor:
         self.data_file = PATHS['HISTORICAL_DATA']
         self.predictions_file = PATHS['PREDICTIONS']
         
-        # Models initialization
+        # Models initialization with enhanced configuration
         self.scaler = StandardScaler()
-        self.probabilistic_model = GaussianNB()
-        self.pattern_model = MLPClassifier(
-            hidden_layer_sizes=(256, 128),
-            activation='relu',
-            solver='adam',
-            max_iter=500
+        
+        # Probabilistic model for multi-class classification
+        self.probabilistic_model = GaussianNB(
+            priors=None,  # Let the model learn class probabilities from data
+            var_smoothing=1e-9  # Default smoothing parameter
         )
         
-        # Analysis components
-        self.analyzer = DataAnalysis([])
+        # Neural network with optimized architecture
+        self.pattern_model = MLPClassifier(
+            hidden_layer_sizes=(256, 128, 80),  # Optimized for lottery number prediction
+            activation='relu',
+            solver='adam',
+            alpha=0.0001,  # L2 regularization parameter
+            batch_size='auto',
+            learning_rate='adaptive',
+            learning_rate_init=0.001,
+            max_iter=500,
+            shuffle=True,
+            random_state=42,
+            early_stopping=True,  # Enable early stopping
+            validation_fraction=0.1,  # Use 10% of training data for validation
+            n_iter_no_change=10  # Number of iterations with no improvement to wait before stopping
+        )
+        
+        # Initialize analysis components
+        self.analyzer = None  # Will be initialized when needed
         
         # Enhanced state tracking
         self.training_status = {
@@ -48,11 +72,21 @@ class LotteryPredictor:
             'error': None,
             'prob_score': None,
             'pattern_score': None,
-            'features': None
+            'features': None,
+            'model_config': {
+                'num_classes': self.num_classes,
+                'numbers_to_draw': self.numbers_to_draw,
+                'feature_dimension': None  # Will be set during training
+            }
         }
         
-        # Initialize pipeline
-        self._initialize_pipeline()
+        # Initialize pipeline data storage
+        self.pipeline_data = {}
+        
+        print(f"\nInitialized LotteryPredictor:")
+        print(f"- Number range: {numbers_range}")
+        print(f"- Numbers to draw: {numbers_to_draw}")
+        print(f"- Number of classes: {self.num_classes}")
     
     def _initialize_pipeline(self):
         """Initialize the prediction pipeline with ordered stages"""
@@ -441,20 +475,59 @@ class LotteryPredictor:
             return None, None
 
     def _post_process_predictions(self, predictions):
-        """Process and combine predictions"""
+        """Process and combine predictions to get exactly 20 numbers"""
         print("\nPost-processing predictions...")
         try:
             if predictions[0] is None or predictions[1] is None:
                 raise ValueError("Invalid predictions received")
                 
             prob_pred, pattern_pred = predictions
+            
+            # Validate prediction arrays
+            if len(prob_pred) != self.num_classes or len(pattern_pred) != self.num_classes:
+                raise ValueError(f"Prediction arrays must have length {self.num_classes}")
+                
+            # Combine predictions with weights and normalization
+            prob_pred = prob_pred / np.sum(prob_pred)  # Normalize probabilities
+            pattern_pred = pattern_pred / np.sum(pattern_pred)  # Normalize pattern predictions
             combined_pred = 0.4 * prob_pred + 0.6 * pattern_pred
             
-            predicted_numbers = np.argsort(combined_pred)[-self.numbers_to_draw:]
-            final_numbers = sorted([int(i) + self.numbers_range[0] for i in predicted_numbers])
+            # Get top numbers and ensure uniqueness
+            top_indices = np.argsort(combined_pred)[::-1]  # Sort in descending order
+            final_numbers = []
+            i = 0
             
-            self.pipeline_data['final_prediction'] = final_numbers
-            self.pipeline_data['probabilities'] = combined_pred
+            while len(final_numbers) < self.numbers_to_draw and i < len(top_indices):
+                number = int(top_indices[i]) + self.numbers_range[0]
+                if number not in final_numbers:  # Ensure uniqueness
+                    if 1 <= number <= 80:  # Validate range
+                        final_numbers.append(number)
+                i += 1
+            
+            # Final validation
+            if len(final_numbers) != self.numbers_to_draw:
+                raise ValueError(f"Could not generate {self.numbers_to_draw} unique valid numbers")
+            
+            # Sort final numbers
+            final_numbers.sort()
+            
+            # Store results in pipeline data with additional metadata
+            self.pipeline_data.update({
+                'final_prediction': final_numbers,
+                'probabilities': combined_pred,
+                'prediction_metadata': {
+                    'prob_weight': 0.4,
+                    'pattern_weight': 0.6,
+                    'top_prob_numbers': sorted([int(i) + self.numbers_range[0] for i in np.argsort(prob_pred)[-5:]]),
+                    'top_pattern_numbers': sorted([int(i) + self.numbers_range[0] for i in np.argsort(pattern_pred)[-5:]]),
+                    'combined_confidence': float(np.mean([combined_pred[n - self.numbers_range[0]] for n in final_numbers]))
+                }
+            })
+            
+            print("\nPrediction Summary:")
+            print(f"Final Numbers: {final_numbers}")
+            print(f"Average Confidence: {self.pipeline_data['prediction_metadata']['combined_confidence']:.4f}")
+            
             return final_numbers, combined_pred
             
         except Exception as e:
@@ -587,7 +660,7 @@ class LotteryPredictor:
             return None, None, None
 
     def train_models(self, features, labels):
-        """Train both models with validation"""
+        """Train both models with validation for multi-label prediction"""
         try:
             print("\nStarting model training...")
             if features is None or labels is None:
@@ -600,27 +673,53 @@ class LotteryPredictor:
             if features.shape[1] != 84:
                 raise ValueError(f"Expected 84 features, got {features.shape[1]}")
                 
+            # Convert labels to multi-label format
+            multi_labels = np.zeros((len(labels), self.num_classes))
+            for i, draw in enumerate(labels):
+                if isinstance(draw, (list, np.ndarray)):
+                    for num in draw:
+                        if 1 <= num <= self.num_classes:
+                            multi_labels[i, num-1] = 1
+                else:
+                    if 1 <= draw <= self.num_classes:
+                        multi_labels[i, draw-1] = 1
+                        
             print(f"Training data: {len(features)} samples with {features.shape[1]} features")
+            print(f"Labels shape: {multi_labels.shape}")
             
-            # Add train-test split
-            if len(features) < 2:
-                raise ValueError("Insufficient data for training")
-                
+            # Validate label distribution
+            positive_labels = np.sum(multi_labels, axis=1)
+            if not np.all(positive_labels == self.numbers_to_draw):
+                print(f"Warning: Some samples don't have exactly {self.numbers_to_draw} positive labels")
+            
+            # Add train-test split with stratification
             X_train, X_test, y_train, y_test = train_test_split(
-                features, labels, test_size=0.2, random_state=42
+                features, multi_labels, 
+                test_size=0.2, 
+                random_state=42
             )
             
             # Scale features
             X_train_scaled = self.scaler.fit_transform(X_train)
             X_test_scaled = self.scaler.transform(X_test)
             
-            print("Training probabilistic model...")
+            # Train probabilistic model
+            print("\nTraining probabilistic model...")
             self.probabilistic_model.fit(X_train_scaled, y_train)
-            prob_score = self.probabilistic_model.score(X_test_scaled, y_test)
+            prob_predictions = self.probabilistic_model.predict(X_test_scaled)
+            prob_score = np.mean([
+                np.sum(np.sort(pred)[-self.numbers_to_draw:] == 1) / self.numbers_to_draw
+                for pred in prob_predictions
+            ])
             
-            print("Training pattern model...")
+            # Train pattern model
+            print("\nTraining pattern model...")
             self.pattern_model.fit(X_train_scaled, y_train)
-            pattern_score = self.pattern_model.score(X_test_scaled, y_test)
+            pattern_predictions = self.pattern_model.predict(X_test_scaled)
+            pattern_score = np.mean([
+                np.sum(np.sort(pred)[-self.numbers_to_draw:] == 1) / self.numbers_to_draw
+                for pred in pattern_predictions
+            ])
             
             # Update training status with enhanced metadata
             self.training_status.update({
@@ -630,8 +729,12 @@ class LotteryPredictor:
                 'prob_score': prob_score,
                 'pattern_score': pattern_score,
                 'feature_dimension': features.shape[1],
-                'training_samples': len(features),
+                'training_samples': len(X_train),
                 'test_samples': len(X_test),
+                'label_distribution': {
+                    'mean_positive': float(np.mean(positive_labels)),
+                    'std_positive': float(np.std(positive_labels))
+                },
                 'feature_stats': {
                     'mean': float(np.mean(features)),
                     'std': float(np.std(features)),
