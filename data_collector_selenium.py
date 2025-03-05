@@ -121,13 +121,15 @@ class KinoDataCollector:
             if os.path.exists(self.csv_file) and os.path.getsize(self.csv_file) > 0:
                 try:
                     existing_df = pd.read_csv(self.csv_file)
-                    combined_df = pd.concat([existing_df, draw_df], ignore_index=True)
-                    # Keep only the last 24 draws
-                    combined_df = combined_df.tail(24)
-                    combined_df.to_csv(self.csv_file, index=False)
+                    # Check for duplicates before concatenating
+                    if not any(existing_df['date'] == draw_date):
+                        combined_df = pd.concat([existing_df, draw_df], ignore_index=True)
+                        # Removed the 24 draws limitation
+                        combined_df.to_csv(self.csv_file, index=False)
+                    else:
+                        print(f"Draw {draw_date} already exists in history")
                 except pd.errors.EmptyDataError:
                     draw_df.to_csv(self.csv_file, index=False)
-                print(f"Draw {draw_date} saved to {self.csv_file}")
             else:
                 draw_df.to_csv(self.csv_file, index=False)
                 print(f"Created new file {self.csv_file} with draw {draw_date}")
@@ -137,14 +139,14 @@ class KinoDataCollector:
             self.collection_status['draws_collected'] += 1
             self.collection_status['last_successful_draw'] = draw_date
             return True
-            
+                
         except Exception as e:
             if self.debug:
                 print(f"Error saving draw: {str(e)}")
             self.collection_status['last_error'] = str(e)
             return False
 
-    def fetch_latest_draws(self, num_draws=24, delay=1):
+    def fetch_latest_draws(self, num_draws=20, delay=1):
         driver = None
         try:
             print(f"\nFetching {num_draws} latest draws...")

@@ -1,22 +1,32 @@
+import os
+import sys
 from typing import Counter
 import pandas as pd
 from datetime import datetime
 import numpy as np
-import os
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Add the project root to Python path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+sys.path.append(project_root)
+
+# Import directly from config folder
+from config.paths import PATHS, ensure_directories
+
 class PredictionEvaluator:
     def __init__(self):
-        self.predictions_file = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\versiuni_de_care_nu_ma_ating\\Versiune1.4\\data\\processed\\predictions.csv'
-        self.historical_file = 'src/historical_draws.csv'
-        self.results_dir = 'data/processed'
+        # Use PATHS configuration for relative paths
+        self.predictions_file = os.path.join(os.path.dirname(PATHS['PREDICTIONS']), 'predicted_draws.csv')
+        self.historical_file = PATHS['HISTORICAL_DATA']
+        self.results_dir = os.path.dirname(PATHS['PREDICTIONS'])
         self.results_file = os.path.join(self.results_dir, 'prediction_results.xlsx')
-        self.analysis_file = os.path.join(self.results_dir, 'analysis_results.csv')
+        self.analysis_file = PATHS['ANALYSIS']
         
-        # Ensure directory exists
-        os.makedirs(self.results_dir, exist_ok=True)
+        # Ensure directories exist
+        ensure_directories()
         
         # Initialize evaluation metrics
         self.evaluation_metrics = {
@@ -166,9 +176,7 @@ class PredictionEvaluator:
         return result
 
     def get_performance_stats(self):
-        """
-        Calculate enhanced performance statistics
-        """
+        """Calculate enhanced performance statistics"""
         try:
             if not os.path.exists(self.results_file):
                 return None
@@ -247,52 +255,61 @@ class PredictionEvaluator:
     def evaluate_past_predictions(self):
         """Evaluate past predictions with enhanced analysis"""
         try:
-            predictions_df = pd.read_csv(self.predictions_file, names=["Timestamp", "Predicted_Numbers", "Probabilities"])
-            if predictions_df.empty:
-                print("\nNo predictions found in the file.")
+            # Load predictions and historical data
+            if not os.path.exists(self.predictions_file):
+                print("\nNo predictions file found.")
                 return
                 
             if not os.path.exists(self.historical_file):
                 print("\nNo historical draw data found.")
                 return
-                
+            
+            # Load predictions with proper format
+            predictions_df = pd.read_csv(self.predictions_file, header=None)
             historical_df = pd.read_csv(self.historical_file, header=None)
-            if historical_df.empty:
-                print("\nNo historical draw data to compare.")
+            
+            if predictions_df.empty or historical_df.empty:
+                print("\nNo data to compare.")
                 return
-                
+            
+            # Convert dates to datetime
+            current_time = datetime.now()
+            predictions_df[20] = pd.to_datetime(predictions_df[20], format='%H:%M %d-%m-%Y', errors='coerce')
             historical_df[20] = pd.to_datetime(historical_df[20], format='%H:%M %d-%m-%Y', errors='coerce')
             
+            # Filter out future predictions
+            past_predictions = predictions_df[predictions_df[20] < current_time]
+            
             evaluation_results = []
-            for _, row in predictions_df.iterrows():
-                prediction_date = row['Timestamp']
-                predicted_numbers = list(map(int, row['Predicted_Numbers'].strip('[]').split(',')))
-                probabilities = list(map(float, row['Probabilities'].strip('[]').split(',')))
+            for idx, pred_row in past_predictions.iterrows():
+                pred_date = pred_row[20]
                 
-                parsed_prediction_date = pd.to_datetime(prediction_date, errors='coerce')
-                if parsed_prediction_date > datetime.now():
-                    continue
-                
-                actual_row = historical_df[historical_df[20] == parsed_prediction_date]
+                # Find matching historical draw
+                actual_row = historical_df[historical_df[20] == pred_date]
                 if actual_row.empty:
                     continue
-                    
-                actual_numbers = actual_row.iloc[0][:20].values
-                actual_numbers = list(map(int, actual_numbers))
                 
-                # Calculate prediction confidence
-                confidence = np.mean(probabilities)
+                # Get predicted and actual numbers
+                predicted_numbers = pred_row[:20].astype(int).tolist()
+                actual_numbers = actual_row.iloc[0][:20].astype(int).tolist()
                 
                 # Compare and save results
-                result = self.save_comparison(predicted_numbers, actual_numbers, prediction_date, confidence)
+                result = self.save_comparison(
+                    predicted_numbers, 
+                    actual_numbers, 
+                    pred_date.strftime('%Y-%m-%d %H:%M:%S')
+                )
                 evaluation_results.append(result)
             
-            # Generate performance statistics
-            stats = self.get_performance_stats()
-            self.display_summary_results(stats)
-            
-            # Generate performance plots
-            self.plot_performance_trends()
+            if evaluation_results:
+                # Generate performance statistics
+                stats = self.get_performance_stats()
+                self.display_summary_results(stats)
+                
+                # Generate performance plots
+                self.plot_performance_trends()
+            else:
+                print("\nNo past predictions found to evaluate.")
                 
         except Exception as e:
             print(f"\nError in evaluation: {str(e)}")
