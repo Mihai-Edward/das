@@ -217,6 +217,55 @@ class DrawHandler:
             print(f"Error in prediction run: {e}")
             return None, None, None
 
+    def _handle_pipeline_results(self, predictions, probabilities, analysis_results):
+        """Handle the results from the prediction pipeline"""
+        try:
+            if predictions is None or probabilities is None:
+                print("No valid predictions to handle")
+                return False
+                
+            # Format timestamp and next draw time
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            next_draw_time = get_next_draw_time(datetime.now())
+            
+            # Save predictions to CSV
+            self.save_predictions_to_csv(predictions, probabilities, timestamp)
+            
+            # Also save to Excel for better visualization
+            self.save_predictions_to_excel(predictions, probabilities, timestamp)
+            
+            # Display formatted results
+            formatted_numbers = ','.join(map(str, sorted(predictions)))
+            print(f"\nPredicted numbers for next draw at {next_draw_time.strftime('%H:%M %d-%m-%Y')}:")
+            print(f"Numbers: {formatted_numbers}")
+            
+            # Display probabilities
+            print("\nProbabilities for each predicted number:")
+            for num, prob in zip(sorted(predictions), 
+                               [probabilities[num - 1] for num in predictions]):
+                print(f"Number {num}: {prob:.4f}")
+            
+            # Save analysis results if available
+            if analysis_results:
+                # Save hot numbers if available
+                if 'hot_numbers' in analysis_results:
+                    top_4_numbers = analysis_results['hot_numbers'][:4]
+                    top_4_file_path = os.path.join(self.predictions_dir, 'top_4.xlsx')
+                    save_top_4_numbers_to_excel(top_4_numbers, top_4_file_path)
+                    print(f"\nTop 4 numbers based on analysis: {','.join(map(str, top_4_numbers))}")
+                
+                # Display analysis summary
+                print("\n=== Analysis Results ===")
+                for key, value in analysis_results.items():
+                    if key != 'clusters':  # Skip clusters for cleaner output
+                        print(f"\n{key.replace('_', ' ').title()}:")
+                        print(value)
+                        
+            return True
+        except Exception as e:
+            print(f"Error handling pipeline results: {e}")
+            return False
+
 def save_draw_to_csv(draw_date, draw_numbers, csv_file=None):
     """Save draw results to CSV"""
     if csv_file is None:
@@ -325,6 +374,9 @@ def extract_date_features(df):
     df['day_of_week'] = df['date'].dt.dayofweek
     df['hour'] = df['date'].dt.hour
     df['minute'] = df['date'].dt.minute
+    df['month'] = df['date'].dt.month
+    df['day_of_year'] = df['date'].dt.dayofyear
+    df['days_since_first_draw'] = (df['date'] - df['date'].min()).dt.days
     return df
 
 def get_next_draw_time(current_time):
