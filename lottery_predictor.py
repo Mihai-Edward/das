@@ -672,34 +672,31 @@ class LotteryPredictor:
             # Ensure features have correct dimension (84)
             if features.shape[1] != 84:
                 raise ValueError(f"Expected 84 features, got {features.shape[1]}")
-                
-            # Convert labels to integers and validate
-            labels = np.array(labels, dtype=int)
-            if not np.all((labels >= 1) & (labels <= 80)):
-                raise ValueError("Labels must be between 1 and 80")
-                
-            # Create multi-label format
-            multi_labels = np.zeros((len(labels), self.num_classes))
+            
+            # Convert labels to proper format for our models
+            y = np.zeros((len(labels), self.num_classes))
             for i, label in enumerate(labels):
                 if isinstance(label, (list, np.ndarray)):
+                    # Handle multiple labels per sample
                     for num in label:
                         if 1 <= num <= self.num_classes:
-                            multi_labels[i, num-1] = 1
+                            y[i, num-1] = 1
                 else:
-                    if 1 <= label <= self.num_classes:
-                        multi_labels[i, label-1] = 1
+                    # Handle single label
+                    label_idx = int(label) - 1
+                    if 0 <= label_idx < self.num_classes:
+                        y[i, label_idx] = 1
             
             # Validate label distribution
-            labels_per_sample = np.sum(multi_labels, axis=1)
-            print(f"\nLabel distribution:")
-            print(f"- Average labels per sample: {np.mean(labels_per_sample):.2f}")
-            print(f"- Min labels per sample: {np.min(labels_per_sample)}")
-            print(f"- Max labels per sample: {np.max(labels_per_sample)}")
+            labels_per_sample = np.sum(y, axis=1)
+            print("\nLabel Distribution:")
+            print(f"- Mean labels per sample: {np.mean(labels_per_sample):.2f}")
+            print(f"- Std deviation: {np.std(labels_per_sample):.2f}")
             
-            # Split the data
+            # Split the data with stratification
             X_train, X_test, y_train, y_test = train_test_split(
-                features, multi_labels, 
-                test_size=0.2, 
+                features, y,
+                test_size=0.2,
                 random_state=42,
                 shuffle=True
             )
@@ -708,16 +705,14 @@ class LotteryPredictor:
             X_train_scaled = self.scaler.fit_transform(X_train)
             X_test_scaled = self.scaler.transform(X_test)
             
-            # Train and evaluate probabilistic model
+            # Train probabilistic model on most frequent numbers
             print("\nTraining probabilistic model...")
-            self.probabilistic_model.fit(X_train_scaled, y_train)
-            prob_predictions = self.probabilistic_model.predict(X_test_scaled)
-            prob_score = np.mean([
-                np.sum(np.sort(pred)[-self.numbers_to_draw:] == 1) / self.numbers_to_draw
-                for pred in prob_predictions
-            ])
+            y_train_prob = np.argmax(y_train, axis=1)
+            y_test_prob = np.argmax(y_test, axis=1)
+            self.probabilistic_model.fit(X_train_scaled, y_train_prob)
+            prob_score = self.probabilistic_model.score(X_test_scaled, y_test_prob)
             
-            # Train and evaluate pattern model
+            # Train pattern model on full distribution
             print("\nTraining pattern model...")
             self.pattern_model.fit(X_train_scaled, y_train)
             pattern_predictions = self.pattern_model.predict(X_test_scaled)
@@ -725,6 +720,11 @@ class LotteryPredictor:
                 np.sum(np.sort(pred)[-self.numbers_to_draw:] == 1) / self.numbers_to_draw
                 for pred in pattern_predictions
             ])
+            
+            # Calculate feature importance if available
+            feature_importance = None
+            if hasattr(self.probabilistic_model, 'feature_importances_'):
+                feature_importance = self.probabilistic_model.feature_importances_
             
             # Update training status with enhanced metadata
             self.training_status.update({
@@ -738,9 +738,11 @@ class LotteryPredictor:
                 'test_samples': len(X_test),
                 'label_stats': {
                     'mean_labels': float(np.mean(labels_per_sample)),
+                    'std_labels': float(np.std(labels_per_sample)),
                     'min_labels': int(np.min(labels_per_sample)),
                     'max_labels': int(np.max(labels_per_sample))
-                }
+                },
+                'feature_importance': feature_importance
             })
             
             print(f"\nModel Training Results:")
