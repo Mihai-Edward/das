@@ -40,8 +40,8 @@ class LotteryPredictor:
         
         # Modified probabilistic model initialization
         self.probabilistic_model = GaussianNB(
-        priors=np.ones(numbers_range[1]) / numbers_range[1]  # Equal priors for all classes
-        )
+        priors=None  # Let the model learn priors from data
+         )       
         
         # Neural network with optimized architecture
         self.pattern_model = MLPClassifier(
@@ -310,14 +310,14 @@ class LotteryPredictor:
     def _create_feature_vector(self, window):
         """Create base feature vector"""
         features = []
-        number_counts = np.zeros(self.numbers_range[1] - self.numbers_range[0] + 1)
+        number_counts = np.zeros(80)
         
         # Count number frequencies
         number_cols = [f'number{i+1}' for i in range(20)]
         for _, row in window.iterrows():
             for num in row[number_cols]:
-                number_counts[int(num) - self.numbers_range[0]] += 1
-                
+                if 1 <= num <= 80:
+                    number_counts[int(num - 1)] += 1
         features.extend(number_counts / len(window))
         print(f"Window features: {features}")
         
@@ -852,27 +852,47 @@ class LotteryPredictor:
                     # Set pattern model labels (all numbers)
                     for num in numbers:
                         pattern_labels[i, num-1] = 1
-                        valid_samples += 1      
+                    valid_samples += 1      
                 except Exception as e:
                     print(f"Warning: Error processing row {i}: {e}")
                     continue
-                    print(f"\nProcessed {valid_samples} valid samples out of {len(labels)} total samples")
-            # Split data
-            X_train, X_test, y_prob_train, y_prob_test, y_pattern_train, y_pattern_test = train_test_split(
-                features, prob_labels, pattern_labels,
-                test_size=0.2,
-                random_state=42
-            )
             
+            # Filter out rows with all zeros
+            valid_mask = np.any(pattern_labels != 0, axis=1)
+            features = features[valid_mask]
+            prob_labels = prob_labels[valid_mask]
+            pattern_labels = pattern_labels[valid_mask]
+
+            # Initialize priors for probabilistic model
+            class_counts = np.bincount(prob_labels, minlength=80)
+            priors = class_counts / class_counts.sum()
+            self.probabilistic_model.priors = priors
+
+            # Split data
+            X_train, X_test, y_prob_train, y_prob_test = train_test_split(
+                features, prob_labels,
+                test_size=0.2,
+                random_state=42,
+                shuffle=True
+            )
+
+            # Split pattern labels using same indices
+            _, _, y_pattern_train, y_pattern_test = train_test_split(
+                features, pattern_labels,
+                test_size=0.2,
+                random_state=42,
+                shuffle=True
+            )
+        
             # Scale features
             X_train_scaled = self.scaler.fit_transform(X_train)
             X_test_scaled = self.scaler.transform(X_test)
-            
+        
             # Train probabilistic model
             print("\nTraining probabilistic model...")
             self.probabilistic_model.fit(X_train_scaled, y_prob_train)
             prob_score = self.probabilistic_model.score(X_test_scaled, y_prob_test)
-            
+        
             # Train pattern model
             print("\nTraining pattern model...")
             self.pattern_model.fit(X_train_scaled, y_pattern_train)
