@@ -1,3 +1,4 @@
+import glob
 import pandas as pd
 from datetime import datetime, timedelta  # Added timedelta
 import os
@@ -95,7 +96,7 @@ class DrawHandler:
             
             # Load historical data
             historical_data = self._load_historical_data()
-            if historical_data is None or len(historical_data) < 6:  # Need at least 6 draws
+            if historical_data is None or len(historical_data) < 6:
                 raise ValueError("Insufficient historical data for training")
 
             print(f"Loaded {len(historical_data)} draws for training")
@@ -111,8 +112,12 @@ class DrawHandler:
             training_success = self.predictor.train_models(features, labels)
             
             if training_success:
+                # Save models immediately after successful training
+                if not self.predictor.save_models():
+                    raise Exception("Failed to save trained models")
+                    
                 self.pipeline_status['success'] = True
-                print("Models trained successfully")
+                print("Models trained and saved successfully")
                 return True
             else:
                 raise Exception("Model training failed")
@@ -139,19 +144,27 @@ class DrawHandler:
     
     def _get_latest_model(self):
         """Get the path to the latest model"""
-        if os.path.exists(os.path.join(os.path.dirname(self.models_dir), 'model_timestamp.txt')):
-            try:
-                with open(os.path.join(os.path.dirname(self.models_dir), 'model_timestamp.txt'), 'r') as f:
+        try:
+            # First check in the models directory for timestamp file
+            timestamp_file = os.path.join(self.models_dir, 'model_timestamp.txt')
+            if os.path.exists(timestamp_file):
+                with open(timestamp_file, 'r') as f:
                     timestamp = f.read().strip()
-                    return os.path.join(self.models_dir, f'lottery_predictor_{timestamp}')
-            except Exception:
-                pass
-        
-        model_files = [f for f in os.listdir(self.models_dir) if f.endswith('_prob_model.pkl')]
-        if model_files:
-            latest = max(model_files)
-            return os.path.join(self.models_dir, latest.replace('_prob_model.pkl', ''))
-        return None
+                    model_path = os.path.join(self.models_dir, f'lottery_predictor_{timestamp}')
+                    if os.path.exists(f"{model_path}_prob_model.pkl"):
+                        return model_path
+            
+            # Fallback to searching for model files
+            model_files = glob.glob(os.path.join(self.models_dir, "*_prob_model.pkl"))
+            if model_files:
+                latest = max(model_files, key=os.path.getctime)
+                return latest.replace('_prob_model.pkl', '')
+                
+            return None
+                
+        except Exception as e:
+            print(f"Error getting latest model: {e}")
+            return None
 
     def _load_historical_data(self):
         """Load historical data from CSV"""
@@ -190,40 +203,39 @@ class DrawHandler:
         try:
             analysis_results = {}  # Initialize empty analysis results
             
-            predictor = LotteryPredictor(numbers_range=(1, 80), numbers_to_draw=20)
+            # Use the existing predictor instance instead of creating a new one
             model_base = self._get_latest_model()
             
-            if model_base:
-                # Try loading models, if fails attempt training
-                if not predictor.load_models(model_base):
-                    print("Model loading failed, attempting to train new model...")
-                    if not self.train_ml_models():
-                        raise ValueError("Could not load or train models")
-                    model_base = self._get_latest_model()
-                    if not predictor.load_models(model_base):
-                        raise ValueError("Model loading failed after training")
+            if not model_base:
+                raise ValueError("No model base found. Training required.")
                 
-                number_cols = [f'number{i}' for i in range(1, 21)]
-                recent_draws = data.tail(5)[number_cols + ['date', 'day_of_week', 'month', 'day_of_year', 'days_since_first_draw']]
-                
-                # Get all three return values from predict
-                predicted_numbers, probabilities, analysis = predictor.predict(recent_draws)
-                
-                # Merge analysis_results with the new analysis
-                if analysis:
-                    analysis_results.update(analysis)
-                    
-                    # Add model performance metrics if available
-                    if predictor.training_status.get('prob_score') is not None:
-                        analysis_results['model_performance'] = {
-                            'probabilistic_model_score': predictor.training_status['prob_score'],
-                            'pattern_model_score': predictor.training_status['pattern_score']
-                        }
-                
-                return predicted_numbers, probabilities, analysis_results
-                
-            raise ValueError("No valid model base found")
+            # Try loading models
+            if not self.predictor.load_models(model_base):
+                print("Model loading failed, attempting to train new model...")
+                if not self.train_ml_models():
+                    raise ValueError("Could not load or train models")
+                # Get new model path after training
+                model_base = self._get_latest_model()
+                if not model_base or not self.predictor.load_models(model_base):
+                    raise ValueError("Model loading failed after training")
             
+            number_cols = [f'number{i}' for i in range(1, 21)]
+            recent_draws = data.tail(5)[number_cols + ['date', 'day_of_week', 'month', 'day_of_year', 'days_since_first_draw']]
+            
+            # Get predictions
+            predicted_numbers, probabilities, analysis = self.predictor.predict(recent_draws)
+            
+            # Update analysis results
+            if analysis:
+                analysis_results.update(analysis)
+                if self.predictor.training_status.get('prob_score') is not None:
+                    analysis_results['model_performance'] = {
+                        'probabilistic_model_score': self.predictor.training_status['prob_score'],
+                        'pattern_model_score': self.predictor.training_status['pattern_score']
+                    }
+            
+            return predicted_numbers, probabilities, analysis_results
+                
         except Exception as e:
             print(f"Error in prediction run: {e}")
             return None, None, None
