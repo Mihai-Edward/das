@@ -244,9 +244,16 @@ class LotteryPredictor:
         
         try:
             # Update analyzer with current data
-            formatted_draws = [(row['date'], 
-                              [row[f'number{i}'] for i in range(1, 21)]) 
-                             for _, row in data.iterrows()]
+            formatted_draws = []
+            for _, row in data.iterrows():
+                numbers = []
+                for i in range(1, 21):
+                    num = row.get(f'number{i}')
+                    if isinstance(num, (int, float)) and 1 <= num <= 80:
+                        numbers.append(int(num))
+                if len(numbers) == 20:
+                    formatted_draws.append((row['date'], numbers))
+            
             self.analyzer = DataAnalysis(formatted_draws)
             
             # Get analysis results
@@ -254,52 +261,44 @@ class LotteryPredictor:
             hot_numbers, cold_numbers = self.analyzer.hot_and_cold_numbers()
             common_pairs = self.analyzer.find_common_pairs()
             range_analysis = self.analyzer.number_range_analysis()
-            sequences = self.extract_sequence_patterns(data)
-            clusters = self.extract_clusters(data)
             
-            # Convert analysis results to features
-            analysis_features = []
+            # Convert analysis results to features - fixed size array
+            analysis_features = np.zeros(160)  # 80 for frequency + 80 for hot/cold
             
-            # Frequency features
-            freq_vector = np.zeros(80)
+            # Frequency features (first 80)
+            total_freq = sum(frequency.values()) or 1  # Avoid division by zero
             for num, freq in frequency.items():
-                freq_vector[num-1] = freq
-            analysis_features.extend(freq_vector / np.sum(freq_vector))
+                if 1 <= num <= 80:
+                    analysis_features[num-1] = freq / total_freq
             
-            # Hot/Cold numbers features
-            hot_vector = np.zeros(80)
-            for num, _ in hot_numbers:
-                hot_vector[num-1] = 1
-            analysis_features.extend(hot_vector)
+            # Hot/Cold features (second 80)
+            hot_nums = dict(hot_numbers)
+            max_hot_score = max(hot_nums.values()) if hot_nums else 1
+            for num, score in hot_nums.items():
+                if 1 <= num <= 80:
+                    analysis_features[80 + num-1] = score / max_hot_score
             
-            # Common pairs features
-            pairs_vector = np.zeros(80)
-            for (num1, num2), freq in common_pairs:
-                pairs_vector[num1-1] += freq
-                pairs_vector[num2-1] += freq
-            analysis_features.extend(pairs_vector / np.sum(pairs_vector))
-            
-            # Range analysis features
-            range_vector = np.zeros(4)
-            for i, (range_name, count) in enumerate(range_analysis.items()):
-                range_vector[i] = count
-            analysis_features.extend(range_vector / np.sum(range_vector))
-            
-            # Store analysis context
+            # Store analysis context with additional metadata
             self.pipeline_data['analysis_context'] = {
                 'frequency': frequency,
                 'hot_cold': (hot_numbers, cold_numbers),
                 'common_pairs': common_pairs,
                 'range_analysis': range_analysis,
-                'sequences': sequences,
-                'clusters': clusters
+                'feature_stats': {
+                    'total_frequency': total_freq,
+                    'max_hot_score': max_hot_score,
+                    'feature_range': (np.min(analysis_features), np.max(analysis_features))
+                }
             }
             
-            return np.array(analysis_features)
+            print(f"Generated {len(analysis_features)} analysis features")
+            print(f"Feature range: {np.min(analysis_features):.4f} to {np.max(analysis_features):.4f}")
+            
+            return analysis_features
             
         except Exception as e:
             print(f"Error in analysis features generation: {e}")
-            return np.zeros(244)  # Return zero vector of expected size
+            return np.zeros(160)  # Return zero vector of fixed size
 
     def extract_sequence_patterns(self, data, sequence_length=3):
         """Extract sequence patterns with validation"""
@@ -371,21 +370,57 @@ class LotteryPredictor:
         """Create enhanced feature vector combining all features"""
         print("\nGenerating enhanced features...")
         try:
-            # Get base features
+            # Get base features (80 frequency features + 4 statistical features)
             base_features = self._create_feature_vector(data)
             
-            # Get analysis features
+            # Get analysis features (160 features)
             analysis_features = self._create_analysis_features(data)
             
-            # Combine features
-            enhanced_features = np.concatenate([base_features, analysis_features])
-            print(f"Enhanced feature vector shape: {enhanced_features.shape}")
+            # Validate feature dimensions
+            if base_features is None or analysis_features is None:
+                raise ValueError("Failed to generate either base or analysis features")
             
-            self.pipeline_data['features'] = enhanced_features
-            return enhanced_features
+            print(f"Base features shape: {base_features.shape}")
+            print(f"Analysis features shape: {analysis_features.shape}")
             
+            # Ensure consistent feature dimensions
+            if len(base_features) == 84 and len(analysis_features) == 160:
+                # Store both feature sets in pipeline data
+                self.pipeline_data['base_features'] = base_features
+                self.pipeline_data['analysis_features'] = analysis_features
+                
+                # For now, use only base features for prediction
+                # This ensures compatibility with existing trained models
+                enhanced_features = base_features
+                
+                # Add feature metadata
+                self.pipeline_data['feature_metadata'] = {
+                    'base_features_size': len(base_features),
+                    'analysis_features_size': len(analysis_features),
+                    'used_features_size': len(enhanced_features),
+                    'feature_stats': {
+                        'mean': float(np.mean(enhanced_features)),
+                        'std': float(np.std(enhanced_features)),
+                        'min': float(np.min(enhanced_features)),
+                        'max': float(np.max(enhanced_features))
+                    }
+                }
+                
+                print(f"Using feature vector of shape: {enhanced_features.shape}")
+                print("Feature statistics:")
+                for key, value in self.pipeline_data['feature_metadata']['feature_stats'].items():
+                    print(f"  {key}: {value:.4f}")
+                
+                self.pipeline_data['features'] = enhanced_features
+                return enhanced_features
+            else:
+                print(f"Feature dimension mismatch: base={len(base_features)}, analysis={len(analysis_features)}")
+                print("Falling back to base features only")
+                return base_features
+                
         except Exception as e:
             print(f"Error in enhanced feature creation: {e}")
+            print("Falling back to base feature generation")
             return self._create_feature_vector(data)  # Fallback to base features
     
     def _generate_model_predictions(self, features):
@@ -560,8 +595,12 @@ class LotteryPredictor:
                 
             if len(features) == 0 or len(labels) == 0:
                 raise ValueError("Empty features or labels")
+            
+            # Ensure features have correct dimension (84)
+            if features.shape[1] != 84:
+                raise ValueError(f"Expected 84 features, got {features.shape[1]}")
                 
-            print(f"Training data: {len(features)} samples")
+            print(f"Training data: {len(features)} samples with {features.shape[1]} features")
             
             # Add train-test split
             if len(features) < 2:
@@ -583,23 +622,37 @@ class LotteryPredictor:
             self.pattern_model.fit(X_train_scaled, y_train)
             pattern_score = self.pattern_model.score(X_test_scaled, y_test)
             
-            # Update training status
+            # Update training status with enhanced metadata
             self.training_status.update({
                 'success': True,
                 'model_loaded': True,
                 'timestamp': datetime.now(),
                 'prob_score': prob_score,
-                'pattern_score': pattern_score
+                'pattern_score': pattern_score,
+                'feature_dimension': features.shape[1],
+                'training_samples': len(features),
+                'test_samples': len(X_test),
+                'feature_stats': {
+                    'mean': float(np.mean(features)),
+                    'std': float(np.std(features)),
+                    'min': float(np.min(features)),
+                    'max': float(np.max(features))
+                }
             })
             
-            print(f"Models trained successfully. Scores - Probabilistic: {prob_score:.4f}, Pattern: {pattern_score:.4f}")
+            print(f"\nModel Training Results:")
+            print(f"- Samples: {len(features)} ({len(X_test)} test samples)")
+            print(f"- Features: {features.shape[1]}")
+            print(f"- Probabilistic Model Score: {prob_score:.4f}")
+            print(f"- Pattern Model Score: {pattern_score:.4f}")
             return True
             
         except Exception as e:
             print(f"Error training models: {e}")
             self.training_status.update({
                 'success': False,
-                'error': str(e)
+                'error': str(e),
+                'timestamp': datetime.now()
             })
             return False
 
