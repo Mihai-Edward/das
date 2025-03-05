@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import os
 import glob
 from sklearn.model_selection import train_test_split
+from config.paths import PATHS, ensure_directories
 
 class LotteryPredictor:
     def __init__(self, numbers_range=(1, 80), numbers_to_draw=20):
@@ -18,10 +19,11 @@ class LotteryPredictor:
         self.numbers_range = numbers_range
         self.numbers_to_draw = numbers_to_draw
         
-        # File paths (preserved from original)
-        self.models_dir = 'src/ml_models'
-        self.data_file = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\proiectnow\\Versiune1.4\\src\\historical_draws.csv'
-        self.predictions_file = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\proiectnow\\Versiune1.4\\data\\processed\\predictions.csv'
+        # Initialize paths using config
+        ensure_directories()
+        self.models_dir = PATHS['MODELS_DIR']
+        self.data_file = PATHS['HISTORICAL_DATA']
+        self.predictions_file = PATHS['PREDICTIONS']
         
         # Models initialization
         self.scaler = StandardScaler()
@@ -427,7 +429,7 @@ class LotteryPredictor:
         try:
             if path_prefix is None:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                path_prefix = f'{self.models_dir}/lottery_predictor_{timestamp}'
+                path_prefix = os.path.join(self.models_dir, f'lottery_predictor_{timestamp}')
             
             os.makedirs(os.path.dirname(path_prefix), exist_ok=True)
             
@@ -436,7 +438,8 @@ class LotteryPredictor:
             joblib.dump(self.scaler, f'{path_prefix}_scaler.pkl')
             
             # Update timestamp file
-            with open('src/model_timestamp.txt', 'w') as f:
+            timestamp_file = os.path.join(os.path.dirname(self.models_dir), 'model_timestamp.txt')
+            with open(timestamp_file, 'w') as f:
                 f.write(path_prefix.split('_')[-1])
             
             return True
@@ -450,7 +453,7 @@ class LotteryPredictor:
         try:
             if path_prefix is None:
                 # Get latest model
-                model_files = glob.glob(f"{self.models_dir}/*_prob_model.pkl")
+                model_files = glob.glob(os.path.join(self.models_dir, "*_prob_model.pkl"))
                 if not model_files:
                     raise FileNotFoundError("No models found")
                 path_prefix = max(model_files, key=os.path.getctime).replace('_prob_model.pkl', '')

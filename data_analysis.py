@@ -4,6 +4,7 @@ import pandas as pd
 import os
 from sklearn.cluster import KMeans
 import numpy as np
+from config.paths import PATHS, ensure_directories
 
 class DataAnalysis:
     def __init__(self, draws):
@@ -85,59 +86,71 @@ class DataAnalysis:
             clusters[label].append(number)
         return clusters
 
-    def save_to_excel(self, filename="lottery_analysis.xlsx"):
-        # Frequency Analysis
-        frequency = self.count_frequency()
-        frequency_df = pd.DataFrame(frequency.items(), columns=["Number", "Frequency"])
+    def save_to_excel(self, filename=None):
+        """Save analysis results to Excel file using config paths"""
+        if filename is None:
+            filename = PATHS['ANALYSIS']
+        
+        try:
+            # Ensure directories exist
+            ensure_directories()
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-        # Common Pairs Analysis
-        common_pairs = self.find_common_pairs()
-        common_pairs_df = pd.DataFrame(common_pairs, columns=["Pair", "Frequency"])
-        common_pairs_df["Number 1"] = common_pairs_df["Pair"].apply(lambda x: x[0])
-        common_pairs_df["Number 2"] = common_pairs_df["Pair"].apply(lambda x: x[1])
-        common_pairs_df = common_pairs_df.drop(columns=["Pair"])
+            # Frequency Analysis
+            frequency = self.count_frequency()
+            frequency_df = pd.DataFrame(frequency.items(), columns=["Number", "Frequency"])
 
-        # Consecutive Numbers Analysis
-        consecutive_numbers = self.find_consecutive_numbers()
-        consecutive_numbers_df = pd.DataFrame(consecutive_numbers, columns=["Pair", "Frequency"])
-        consecutive_numbers_df["Number 1"] = consecutive_numbers_df["Pair"].apply(lambda x: x[0])
-        consecutive_numbers_df["Number 2"] = consecutive_numbers_df["Pair"].apply(lambda x: x[1])
-        consecutive_numbers_df = consecutive_numbers_df.drop(columns=["Pair"])
+            # Common Pairs Analysis
+            common_pairs = self.find_common_pairs()
+            common_pairs_df = pd.DataFrame(common_pairs, columns=["Pair", "Frequency"])
+            common_pairs_df["Number 1"] = common_pairs_df["Pair"].apply(lambda x: x[0])
+            common_pairs_df["Number 2"] = common_pairs_df["Pair"].apply(lambda x: x[1])
+            common_pairs_df = common_pairs_df.drop(columns=["Pair"])
 
-        # Number Range Analysis
-        range_analysis = self.number_range_analysis()
-        range_analysis_df = pd.DataFrame(range_analysis.items(), columns=["Range", "Count"])
+            # Consecutive Numbers Analysis
+            consecutive_numbers = self.find_consecutive_numbers()
+            consecutive_numbers_df = pd.DataFrame(consecutive_numbers, columns=["Pair", "Frequency"])
+            consecutive_numbers_df["Number 1"] = consecutive_numbers_df["Pair"].apply(lambda x: x[0])
+            consecutive_numbers_df["Number 2"] = consecutive_numbers_df["Pair"].apply(lambda x: x[1])
+            consecutive_numbers_df = consecutive_numbers_df.drop(columns=["Pair"])
 
-        # Hot and Cold Numbers Analysis
-        hot_numbers, cold_numbers = self.hot_and_cold_numbers()
-        hot_numbers_df = pd.DataFrame(hot_numbers, columns=["Number", "Frequency"])
-        cold_numbers_df = pd.DataFrame(cold_numbers, columns=["Number", "Frequency"])
+            # Range Analysis
+            range_analysis = self.number_range_analysis()
+            range_analysis_df = pd.DataFrame(range_analysis.items(), columns=["Range", "Count"])
 
-        # Sequence Pattern Analysis
-        sequence_patterns = self.sequence_pattern_analysis()
-        sequence_patterns_df = pd.DataFrame(sequence_patterns, columns=["Sequence", "Frequency"])
+            # Hot and Cold Numbers
+            hot_numbers, cold_numbers = self.hot_and_cold_numbers()
+            hot_numbers_df = pd.DataFrame([(num, freq) for num, freq in frequency.items() if num in hot_numbers], 
+                                         columns=["Number", "Frequency"])
+            cold_numbers_df = pd.DataFrame([(num, freq) for num, freq in frequency.items() if num in cold_numbers], 
+                                          columns=["Number", "Frequency"])
 
-        # Cluster Analysis
-        clusters = self.cluster_analysis()
-        clusters_df = pd.DataFrame([(k, v) for k, vs in clusters.items() for v in vs], columns=["Cluster", "Number"])
+            # Sequence Pattern Analysis
+            sequence_patterns = self.sequence_pattern_analysis()
+            sequence_patterns_df = pd.DataFrame(sequence_patterns, columns=["Sequence", "Frequency"])
 
-        # Ensure the processed data directory exists
-        processed_data_dir = "data/processed"
-        os.makedirs(processed_data_dir, exist_ok=True)
+            # Cluster Analysis
+            clusters = self.cluster_analysis()
+            clusters_df = pd.DataFrame([(k, v) for k, vs in clusters.items() for v in vs], 
+                                      columns=["Cluster", "Number"])
 
-        # Save to Excel file in the processed data directory
-        file_path = os.path.join(processed_data_dir, filename)
-        with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-            frequency_df.to_excel(writer, sheet_name='Frequency', index=False)
-            common_pairs_df.to_excel(writer, sheet_name='Common Pairs', index=False)
-            consecutive_numbers_df.to_excel(writer, sheet_name='Consecutive Numbers', index=False)
-            range_analysis_df.to_excel(writer, sheet_name='Number Range', index=False)
-            hot_numbers_df.to_excel(writer, sheet_name='Hot Numbers', index=False)
-            cold_numbers_df.to_excel(writer, sheet_name='Cold Numbers', index=False)
-            sequence_patterns_df.to_excel(writer, sheet_name='Sequence Patterns', index=False)
-            clusters_df.to_excel(writer, sheet_name='Clusters', index=False)
+            # Save to Excel file
+            with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+                frequency_df.to_excel(writer, sheet_name='Frequency', index=False)
+                common_pairs_df.to_excel(writer, sheet_name='Common Pairs', index=False)
+                consecutive_numbers_df.to_excel(writer, sheet_name='Consecutive Numbers', index=False)
+                range_analysis_df.to_excel(writer, sheet_name='Number Range', index=False)
+                hot_numbers_df.to_excel(writer, sheet_name='Hot Numbers', index=False)
+                cold_numbers_df.to_excel(writer, sheet_name='Cold Numbers', index=False)
+                sequence_patterns_df.to_excel(writer, sheet_name='Sequence Patterns', index=False)
+                clusters_df.to_excel(writer, sheet_name='Clusters', index=False)
 
-        print(f"\nAnalysis results saved to {file_path}")
+            print(f"\nAnalysis results saved to {filename}")
+            return True
+            
+        except Exception as e:
+            print(f"Error saving analysis results: {e}")
+            return False
 
 if __name__ == "__main__":
     # Example usage

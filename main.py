@@ -4,17 +4,21 @@ import pandas as pd
 import numpy as np
 from lottery_predictor import LotteryPredictor
 from datetime import datetime, timedelta
+import pytz
 from data_collector_selenium import KinoDataCollector
 from data_analysis import DataAnalysis
-from draw_handler import save_draw_to_csv
+from draw_handler import DrawHandler
 from prediction_evaluator import PredictionEvaluator
 import joblib
-from draw_handler import DrawHandler  # Add this import
+from config.paths import PATHS, ensure_directories
 
-def ensure_directories():
-    directories = ['src/ml_models', 'data/processed']
-    for directory in directories:
-        os.makedirs(directory, exist_ok=True)
+def initialize_system():
+    """Initialize system and ensure all directories exist"""
+    ensure_directories()
+    return {
+        'start_time': datetime.now(),
+        'system_ready': True
+    }
 
 def check_and_train_model():
     """Check if a trained model exists and train if needed using DrawHandler"""
@@ -48,7 +52,10 @@ def check_and_train_model():
         print(f"Error checking/training model: {e}")
         return False
 
-def load_data(file_path):
+def load_data(file_path=None):
+    if file_path is None:
+        file_path = PATHS['HISTORICAL_DATA']
+        
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Data file {file_path} not found")
     df = pd.read_csv(file_path)
@@ -81,22 +88,14 @@ def get_next_draw_time(current_time):
     next_draw_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(minutes=minutes)
     return next_draw_time
 
-def save_predictions_to_csv(predicted_numbers, probabilities, next_draw_time, file_path):
-    data = {
-        'Timestamp': [next_draw_time.strftime('%H:%M %d-%m-%Y')],
-        'Predicted_Numbers': [','.join(map(str, predicted_numbers))],
-        'Probabilities': [','.join(map(str, [probabilities[num - 1] for num in predicted_numbers]))]
-    }
-    df = pd.DataFrame(data)
+def save_top_4_numbers_to_excel(top_4_numbers, file_path=None):
+    if file_path is None:
+        file_path = os.path.join(os.path.dirname(PATHS['PREDICTIONS']), 'top_4.xlsx')
     
-    if not os.path.exists(file_path):
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        df.to_csv(file_path, index=False)
-    else:
-        df.to_csv(file_path, mode='a', header=not os.path.exists(file_path), index=False)
-
-def save_top_4_numbers_to_excel(top_4_numbers, file_path):
     df = pd.DataFrame({'Top 4 Numbers': top_4_numbers})
+    
+    # Create directory if it doesn't exist
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     df.to_excel(file_path, index=False)
 
 def evaluate_numbers(historical_data):
@@ -144,14 +143,13 @@ def train_and_predict():
                 print(f"Number {num}: {prob:.4f}")
 
             # Save predictions using handler
-            predictions_file = os.path.join(handler.predictions_dir, 'predictions.csv')
             handler.save_predictions_to_csv(predictions, probabilities, 
                                          next_draw_time.strftime('%Y-%m-%d %H:%M:%S'))
             
             # Handle top 4 numbers if available
             if analysis and 'hot_numbers' in analysis:
                 top_4_numbers = analysis['hot_numbers'][:4]
-                top_4_file_path = os.path.join(handler.predictions_dir, 'top_4.xlsx')
+                top_4_file_path = os.path.join(os.path.dirname(PATHS['PREDICTIONS']), 'top_4.xlsx')
                 save_top_4_numbers_to_excel(top_4_numbers, top_4_file_path)
                 print(f"\nTop 4 numbers based on analysis: {','.join(map(str, top_4_numbers))}")
             
@@ -184,8 +182,9 @@ def perform_complete_analysis(draws):
                 'hot_cold_numbers': analysis.hot_and_cold_numbers()
             }
             
-            # Save to specified Excel file
-            excel_path = 'C:\\Users\\MihaiNita\\OneDrive - Prime Batteries\\Desktop\\versiuni_de_care_nu_ma_ating\\Versiune1.4\\data\\processed\\lottery_analysis.xlsx'
+            # Save to Excel file using config path
+            excel_path = PATHS['ANALYSIS']
+            os.makedirs(os.path.dirname(excel_path), exist_ok=True)
             
             # Create Excel writer
             with pd.ExcelWriter(excel_path, engine='xlsxwriter') as writer:
@@ -285,7 +284,13 @@ def test_pipeline_integration():
         return pipeline_status
 
 def main():
-    ensure_directories()
+    # Initialize system
+    system_status = initialize_system()
+    if not system_status['system_ready']:
+        print("System initialization failed.")
+        return
+    
+    print(f"\nSystem initialized at {system_status['start_time']}")
     
     collector = KinoDataCollector()
     draws = None
@@ -310,7 +315,8 @@ def main():
                     for i, draw in enumerate(draws, 1):
                         draw_date, numbers = draw
                         print(f"Draw {i}: Date: {draw_date}, Numbers: {', '.join(map(str, numbers))}")
-                        save_draw_to_csv(draw_date, numbers)
+                        handler = DrawHandler()
+                        handler.save_draw_to_csv(draw_date, numbers)
                 else:
                     print("\nFailed to fetch draws")
             

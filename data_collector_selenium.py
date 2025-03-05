@@ -10,6 +10,7 @@ import time
 import pandas as pd
 import os
 from bs4 import BeautifulSoup
+from config.paths import PATHS, ensure_directories
 
 class KinoDataCollector:
     def __init__(self, user_login="Mihai-Edward", debug=True):
@@ -19,8 +20,11 @@ class KinoDataCollector:
         self.utc_tz = pytz.timezone('UTC')
         self.update_timestamps()
         self.base_url = "https://lotostats.ro/toate-rezultatele-grecia-kino-20-80"
-        self.driver_path = "C:/Users/MihaiNita/OneDrive - Prime Batteries/Desktop/versiuni_de_care_nu_ma_ating/Versiune1.4/msedgedriver.exe"
-        self.csv_file = 'C:/Users/MihaiNita/OneDrive - Prime Batteries/Desktop/versiuni_de_care_nu_ma_ating/Versiune1.4/src/historical_draws.csv'
+        
+        # Updated path handling using config
+        ensure_directories()  # Ensure all required directories exist
+        self.driver_path = PATHS['DRIVER']
+        self.csv_file = PATHS['HISTORICAL_DATA']
         
         # Add data validation tracking
         self.last_collection_time = None
