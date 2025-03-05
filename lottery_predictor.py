@@ -6,6 +6,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.cluster import KMeans
 import joblib
 from collections import OrderedDict, Counter
+from collections import defaultdict
 from data_analysis import DataAnalysis
 from datetime import datetime
 import os
@@ -226,11 +227,11 @@ class LotteryPredictor:
             return data
 
     def prepare_data(self, historical_data):
-        """Prepare data for training with all 20 numbers"""
+        """Prepare data for training with enhanced validation and preprocessing"""
         try:
             print("\nPreparing training data...")
             if historical_data is None or len(historical_data) < 6:
-                raise ValueError("Insufficient historical data for training")
+                raise ValueError("Insufficient historical data for training (minimum 6 draws required)")
                 
             # Sort data chronologically
             historical_data = historical_data.sort_values('date')
@@ -245,92 +246,152 @@ class LotteryPredictor:
             if missing_cols:
                 raise ValueError(f"Missing number columns: {missing_cols}")
             
-            print(f"Processing {len(historical_data) - 5} training samples...")
+            print(f"\nProcessing {len(historical_data) - 5} potential training samples...")
+            valid_samples = 0
+            skipped_samples = 0
+            errors = defaultdict(int)
             
             # Create sliding window for feature extraction
             for i in range(len(historical_data) - 5):
-                # Get current window and next draw
-                window = historical_data.iloc[i:i+5]
-                next_draw = historical_data.iloc[i+5]
-                
-                # Create feature vector from window
-                feature_vector = self._create_feature_vector(window)
-                
-                # Validate feature vector
-                if feature_vector is None or len(feature_vector) != 84:
-                    print(f"Warning: Invalid feature vector at index {i}, skipping")
-                    continue
-                
-                # Get all 20 numbers as labels
                 try:
-                    draw_numbers = next_draw[number_cols].values.astype(int)
+                    # Get current window and next draw
+                    window = historical_data.iloc[i:i+5]
+                    next_draw = historical_data.iloc[i+5]
                     
-                    # Validate numbers are in correct range
-                    if not all((1 <= num <= 80) for num in draw_numbers):
-                        print(f"Warning: Invalid numbers in draw at index {i+5}, skipping")
+                    # Validate window dates are consecutive
+                    dates = pd.to_datetime(window['date'])
+                    if (dates.diff()[1:] > pd.Timedelta(days=2)).any():
+                        errors['non_consecutive_dates'] += 1
+                        continue
+                    
+                    # Create feature vector from window with validation
+                    feature_vector = self._create_feature_vector(window)
+                    if feature_vector is None:
+                        errors['invalid_feature_vector'] += 1
                         continue
                         
-                    # Validate we have exactly 20 numbers
-                    if len(draw_numbers) != 20:
-                        print(f"Warning: Expected 20 numbers, got {len(draw_numbers)} at index {i+5}, skipping")
+                    if len(feature_vector) != 84:  # Expected feature dimension
+                        errors['wrong_feature_dimension'] += 1
                         continue
                     
-                    features.append(feature_vector)
-                    labels.append(draw_numbers)
-                    
-                    if (i + 1) % 100 == 0:  # Progress update every 100 samples
-                        print(f"Processed {i + 1} samples...")
+                    # Get all 20 numbers as labels with validation
+                    try:
+                        draw_numbers = next_draw[number_cols].values.astype(int)
+                        
+                        # Basic number validation
+                        if len(draw_numbers) != self.numbers_to_draw:
+                            errors['wrong_number_count'] += 1
+                            continue
+                            
+                        if not all((1 <= n <= 80) for n in draw_numbers):
+                            errors['numbers_out_of_range'] += 1
+                            continue
+                            
+                        # Check for duplicates
+                        if len(set(draw_numbers)) != self.numbers_to_draw:
+                            errors['duplicate_numbers'] += 1
+                            continue
+                        
+                        # Sort numbers for consistency
+                        draw_numbers = np.sort(draw_numbers)
+                        
+                        features.append(feature_vector)
+                        labels.append(draw_numbers)
+                        valid_samples += 1
+                        
+                        if valid_samples % 100 == 0:  # Progress update every 100 valid samples
+                            print(f"Processed {valid_samples} valid samples...")
+                            
+                    except Exception as e:
+                        print(f"Error processing draw at index {i+5}: {e}")
+                        errors['draw_processing'] += 1
+                        continue
                         
                 except Exception as e:
-                    print(f"Warning: Error processing draw at index {i+5}: {e}")
+                    print(f"Error processing window at index {i}: {e}")
+                    errors['window_processing'] += 1
                     continue
-            
-            # Convert to numpy arrays
+
+            # Convert to numpy arrays with validation
+            if len(features) == 0 or len(labels) == 0:
+                raise ValueError("No valid training samples generated")
+                
             features = np.array(features)
             labels = np.array(labels)
             
             # Final validation
-            if len(features) == 0 or len(labels) == 0:
-                raise ValueError("No valid training samples generated")
-                
-            print("\nTraining Data Summary:")
-            print(f"- Total samples: {len(features)}")
+            if len(features) != len(labels):
+                raise ValueError(f"Feature/label mismatch: {len(features)} features vs {len(labels)} labels")
+            
+            # Print detailed summary
+            print("\nData Preparation Summary:")
+            print(f"- Total potential samples: {len(historical_data) - 5}")
+            print(f"- Valid samples generated: {valid_samples}")
             print(f"- Feature shape: {features.shape}")
             print(f"- Labels shape: {labels.shape}")
             print(f"- Feature stats: min={features.min():.4f}, max={features.max():.4f}, mean={features.mean():.4f}")
             
-            return features, labels
+            if errors:
+                print("\nErrors encountered:")
+                for error_type, count in errors.items():
+                    print(f"- {error_type}: {count}")
             
+            # Additional statistics
+            unique_first_numbers = len(np.unique([label[0] for label in labels]))
+            print(f"\nLabel Statistics:")
+            print(f"- Unique first numbers: {unique_first_numbers}/80")
+            print(f"- Numbers distribution range: {labels.min()}-{labels.max()}")
+            
+            return features, labels
+                    
         except Exception as e:
             print(f"Error preparing training data: {e}")
             return None, None
 
     def _create_feature_vector(self, window):
-        """Create base feature vector"""
-        features = []
-        number_counts = np.zeros(80)
-        
-        # Count number frequencies
-        number_cols = [f'number{i+1}' for i in range(20)]
-        for _, row in window.iterrows():
-            for num in row[number_cols]:
+        """Create feature vector from window of historical draws with enhanced validation"""
+        try:
+            if len(window) != 5:
+                return None
+                
+            number_cols = [f'number{i+1}' for i in range(20)]
+            feature_vector = []
+            
+            # Extract all numbers from the window
+            all_numbers = []
+            for _, draw in window.iterrows():
+                numbers = draw[number_cols].values.astype(int)
+                if len(numbers) != self.numbers_to_draw or not all((1 <= n <= 80) for n in numbers):
+                    return None
+                all_numbers.extend(numbers)
+                
+            all_numbers = np.array(all_numbers)
+            
+            # Calculate frequency features (80 features)
+            freq_vector = np.zeros(80)
+            for num in all_numbers:
                 if 1 <= num <= 80:
-                    number_counts[int(num - 1)] += 1
-        features.extend(number_counts / len(window))
-        print(f"Window features: {features}")
-        
-        # Add statistical features
-        last_draw = window.iloc[-1][number_cols]
-        features.extend([
-            np.mean(last_draw),
-            np.std(last_draw),
-            len(set(last_draw) & set(range(1, 41))),
-            len(set(last_draw) & set(range(41, 81)))
-        ])
-        
-        print(f"Feature vector: {features}")
-        return np.array(features)
-    
+                    freq_vector[num-1] += 0.2  # Normalize by window size
+                    
+            feature_vector.extend(freq_vector)
+            
+            # Add statistical features
+            if len(all_numbers) > 0:
+                feature_vector.append(np.mean(all_numbers))
+                feature_vector.append(np.std(all_numbers))
+            else:
+                return None
+                
+            # Add draw size features
+            feature_vector.append(len(window))
+            feature_vector.append(self.numbers_to_draw)
+            
+            return np.array(feature_vector)
+            
+        except Exception as e:
+            print(f"Error creating feature vector: {e}")
+            return None
+
     def _create_analysis_features(self, data):
         """Create enhanced features from data analysis"""
         print("\nGenerating analysis features...")
@@ -824,18 +885,17 @@ class LotteryPredictor:
             if features.shape[1] != 84:
                 raise ValueError(f"Expected 84 features, got {features.shape[1]}")
                 
-            # Initialize arrays
-            prob_labels = np.zeros(len(labels), dtype=int)
+            # Initialize arrays with correct shapes
+            prob_labels = np.full(len(labels), -1, dtype=int)  # Initialize with -1
             pattern_labels = np.zeros((len(labels), 80))
+            used_classes = set()  # Track actually used classes
             valid_samples = 0
             
-            # Create array to ensure all classes are represented
-            all_classes = np.zeros(80)
-            
             # Process real samples
+            print("\nProcessing real samples...")
             for i, row in enumerate(labels):
                 try:
-                    numbers = row if isinstance(row, (list, np.ndarray)) else row.values
+                    numbers = np.sort(row) if isinstance(row, (list, np.ndarray)) else np.sort(row.values)
                     numbers = numbers.astype(int)
                     
                     if len(numbers) != self.numbers_to_draw:
@@ -846,57 +906,73 @@ class LotteryPredictor:
                         print(f"Warning: Row {i} contains invalid numbers")
                         continue
                     
-                    # Update prob_labels and pattern_labels
-                    prob_labels[i] = numbers[0] - 1  # Convert to 0-based index
+                    # Update prob_labels with first number (0-based index)
+                    first_num = numbers[0] - 1
+                    prob_labels[i] = first_num
+                    used_classes.add(first_num)  # Track this class
+                    
+                    # Update pattern_labels
                     for num in numbers:
                         pattern_labels[i, num-1] = 1
-                        all_classes[num-1] = 1
+                    
                     valid_samples += 1
                     
                 except Exception as e:
                     print(f"Warning: Error processing row {i}: {e}")
                     continue
 
-            print(f"\nProcessed {valid_samples} valid samples out of {len(labels)} total samples")
-            print(f"Number of unique classes before synthetic: {len(np.unique(prob_labels))}")
-            
-            if valid_samples < 10:
-                raise ValueError(f"Insufficient valid samples: {valid_samples}")
+            # Remove invalid rows (where prob_labels is still -1)
+            valid_mask = prob_labels != -1
+            features = features[valid_mask]
+            prob_labels = prob_labels[valid_mask]
+            pattern_labels = pattern_labels[valid_mask]
 
-            # Add synthetic samples for missing classes
-            missing_classes = np.where(all_classes == 0)[0]
+            print(f"\nProcessed {valid_samples} valid samples out of {len(labels)} total samples")
+            print(f"Number of unique classes before synthetic: {len(used_classes)}")
+            
+            # Find missing classes
+            missing_classes = np.array([i for i in range(80) if i not in used_classes])
+            
+            print(f"\nMissing classes detection:")
+            print(f"- Total classes: 80")
+            print(f"- Classes present: {len(used_classes)}")
+            print(f"- Missing classes: {len(missing_classes)}")
+            print(f"- Missing class indices: {missing_classes}")
+            
             if len(missing_classes) > 0:
-                print(f"Adding synthetic samples for {len(missing_classes)} missing classes")
+                print(f"\nAdding synthetic samples for {len(missing_classes)} missing classes")
                 
-                # Create synthetic samples
+                # Create multiple synthetic samples per missing class
                 samples_per_class = 5
                 total_synthetic = len(missing_classes) * samples_per_class
                 
-                # Create synthetic features based on mean and std of real features
-                feature_means = np.mean(features, axis=0)
-                feature_stds = np.std(features, axis=0)
-                feature_stds[feature_stds == 0] = 0.1  # Avoid zero std
-                
+                # Initialize synthetic data arrays with correct shapes
                 synthetic_features = np.zeros((total_synthetic, features.shape[1]))
                 synthetic_prob_labels = np.zeros(total_synthetic, dtype=int)
                 synthetic_pattern_labels = np.zeros((total_synthetic, 80))
                 
-                # Generate synthetic samples for each missing class
+                # Calculate feature statistics once
+                feature_means = np.mean(features, axis=0)
+                feature_stds = np.std(features, axis=0)
+                feature_stds[feature_stds < 0.1] = 0.1  # Set minimum std
+                
+                print("\nGenerating synthetic samples...")
+                # Generate synthetic data
                 for idx, missing_class in enumerate(missing_classes):
                     start_idx = idx * samples_per_class
                     end_idx = start_idx + samples_per_class
                     
-                    # Generate features
+                    # Generate synthetic features
                     synthetic_features[start_idx:end_idx] = np.random.normal(
-                        feature_means, 
-                        feature_stds, 
+                        feature_means,
+                        feature_stds,
                         (samples_per_class, features.shape[1])
                     )
                     
-                    # Set probabilistic labels
+                    # Set probabilistic labels for this class
                     synthetic_prob_labels[start_idx:end_idx] = missing_class
                     
-                    # Create pattern labels
+                    # Create pattern labels for this class
                     for i in range(start_idx, end_idx):
                         # Always include the class number
                         synthetic_pattern_labels[i, missing_class] = 1
@@ -909,41 +985,41 @@ class LotteryPredictor:
                             replace=False
                         )
                         synthetic_pattern_labels[i, additional_positions] = 1
+                    
+                    if (idx + 1) % 10 == 0 or (idx + 1) == len(missing_classes):
+                        print(f"Generated samples for {idx + 1}/{len(missing_classes)} classes")
+            
+                # Add debug information before appending
+                print(f"\nBefore appending synthetic data:")
+                print(f"- Original features shape: {features.shape}")
+                print(f"- Synthetic features shape: {synthetic_features.shape}")
+                print(f"- Original prob_labels shape: {prob_labels.shape}")
+                print(f"- Synthetic prob_labels shape: {synthetic_prob_labels.shape}")
                 
                 # Append synthetic data
                 features = np.vstack([features, synthetic_features])
                 prob_labels = np.append(prob_labels, synthetic_prob_labels)
                 pattern_labels = np.vstack([pattern_labels, synthetic_pattern_labels])
                 
-                print(f"After adding synthetic samples:")
+                print(f"\nAfter appending synthetic data:")
                 print(f"- Total samples: {len(features)}")
+                print(f"- Feature shape: {features.shape}")
                 print(f"- Unique classes: {len(np.unique(prob_labels))}")
-                print(f"- Synthetic samples added: {total_synthetic}")
+                print(f"- Class distribution: {np.bincount(prob_labels)}")
 
-            # Validate class coverage
-            unique_classes = np.unique(prob_labels)
-            if len(unique_classes) < 80:
-                print("Warning: Not all classes are represented in the training data")
-                print(f"Missing classes: {set(range(80)) - set(unique_classes)}")
-            
-            # Print debug information
-            print(f"Debug - prob_labels unique values: {np.unique(prob_labels)}")
+        # Print debug information
+            print(f"\nDebug - prob_labels unique values: {np.unique(prob_labels)}")
             print(f"Debug - prob_labels shape: {prob_labels.shape}")
             print(f"Debug - pattern_labels shape: {pattern_labels.shape}")
 
-            # Filter out invalid rows
-            valid_mask = np.any(pattern_labels != 0, axis=1)
-            features = features[valid_mask]
-            prob_labels = prob_labels[valid_mask]
-            pattern_labels = pattern_labels[valid_mask]
-
             # Split data with stratification
+            print("\nSplitting data for training...")
             X_train, X_test, y_prob_train, y_prob_test = train_test_split(
                 features, prob_labels,
                 test_size=0.2,
                 random_state=42,
                 shuffle=True,
-                stratify=prob_labels if len(np.unique(prob_labels)) > 1 else None
+                stratify=prob_labels
             )
             
             # Split pattern labels using same indices
@@ -955,19 +1031,13 @@ class LotteryPredictor:
             )
 
             # Scale features
+            print("Scaling features...")
             X_train_scaled = self.scaler.fit_transform(X_train)
             X_test_scaled = self.scaler.transform(X_test)
             
             # Initialize and train probabilistic model
             print("\nTraining probabilistic model...")
             self.probabilistic_model = GaussianNB()
-            
-            # Compute class weights
-            class_counts = np.bincount(y_prob_train, minlength=80)
-            class_weights = np.ones(80)
-            non_zero_counts = class_counts > 0
-            class_weights[non_zero_counts] = 1 / class_counts[non_zero_counts]
-            class_weights = class_weights / np.sum(class_weights)
             
             # Train models
             self.probabilistic_model.fit(X_train_scaled, y_prob_train)
@@ -983,6 +1053,7 @@ class LotteryPredictor:
             ])
             
             # Update training status
+            total_synthetic = len(features) - valid_samples if len(missing_classes) > 0 else 0
             self.training_status.update({
                 'success': True,
                 'model_loaded': True,
@@ -994,13 +1065,13 @@ class LotteryPredictor:
                 'test_samples': len(X_test),
                 'valid_samples': valid_samples,
                 'classes_represented': len(np.unique(prob_labels)),
-                'synthetic_samples_added': total_synthetic if len(missing_classes) > 0 else 0
+                'synthetic_samples_added': total_synthetic
             })
             
             print(f"\nModel Training Results:")
             print(f"- Total samples: {len(features)}")
             print(f"- Valid samples: {valid_samples}")
-            print(f"- Synthetic samples: {self.training_status['synthetic_samples_added']}")
+            print(f"- Synthetic samples: {total_synthetic}")
             print(f"- Training samples: {len(X_train)}")
             print(f"- Test samples: {len(X_test)}")
             print(f"- Features: {features.shape[1]}")
