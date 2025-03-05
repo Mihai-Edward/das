@@ -7,7 +7,7 @@ from sklearn.cluster import KMeans
 import joblib
 from collections import OrderedDict, Counter
 from data_analysis import DataAnalysis
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import glob
 from sklearn.model_selection import train_test_split
@@ -39,10 +39,8 @@ class LotteryPredictor:
         self.scaler = StandardScaler()
         
         # Modified probabilistic model initialization
-        self.probabilistic_model = GaussianNB(
-        priors=None  # Let the model learn priors from data
-         )       
-        
+        self.probabilistic_model = None
+    
         # Neural network with optimized architecture
         self.pattern_model = MLPClassifier(
             hidden_layer_sizes=(256, 128, 80),  # Optimized for lottery prediction
@@ -638,7 +636,7 @@ class LotteryPredictor:
             
             # Validate prediction arrays
             if len(prob_pred) != self.num_classes or len(pattern_pred) != self.num_classes:
-                raise ValueError(f"Prediction arrays must have length {self.num_classes}")
+                raise ValueError(f"Prediction arrays must have length {self.numbers_to_draw}")
                 
             # Combine predictions with weights and normalization
             prob_pred = prob_pred / np.sum(prob_pred)  # Normalize probabilities
@@ -826,61 +824,77 @@ class LotteryPredictor:
             if features.shape[1] != 84:
                 raise ValueError(f"Expected 84 features, got {features.shape[1]}")
                 
-            # Prepare labels for both models
-            prob_labels = np.zeros(len(labels), dtype=int)  # For probabilistic model
-            pattern_labels = np.zeros((len(labels), 80))  # For pattern model - explicitly use 80
+            # Initialize arrays
+            prob_labels = np.zeros(len(labels), dtype=int)
+            pattern_labels = np.zeros((len(labels), 80))
             valid_samples = 0
-
+            
+            # Create array to ensure all classes are represented
+            all_classes = np.zeros(80)
+            
+            # Process real samples
             for i, row in enumerate(labels):
                 try:
-                    # Convert to array if it's a pandas Series
                     numbers = row if isinstance(row, (list, np.ndarray)) else row.values
                     numbers = numbers.astype(int)
                     
-                    # Validate numbers
                     if len(numbers) != self.numbers_to_draw:
                         print(f"Warning: Row {i} has incorrect number of values")
                         continue
                         
-                    if not all(1 <= n <= 80 for n in numbers):  # Explicitly check for 1-80 range
+                    if not all(1 <= n <= 80 for n in numbers):
                         print(f"Warning: Row {i} contains invalid numbers")
                         continue
                     
-                    # Set probabilistic model label (first number)
-                    prob_labels[i] = numbers[0] - 1  # Convert to 0-based index
-                    
-                    # Set pattern model labels (all numbers)
+                    # Update prob_labels and pattern_labels
+                    prob_labels[i] = numbers[0] - 1
                     for num in numbers:
                         pattern_labels[i, num-1] = 1
-                    valid_samples += 1      
+                        all_classes[num-1] = 1
+                    valid_samples += 1
+                    
                 except Exception as e:
                     print(f"Warning: Error processing row {i}: {e}")
                     continue
-            
+
             print(f"\nProcessed {valid_samples} valid samples out of {len(labels)} total samples")
             
-            if valid_samples < 10:  # Minimum samples needed for meaningful training
+            if valid_samples < 10:
                 raise ValueError(f"Insufficient valid samples: {valid_samples}")
+
+            # Add synthetic samples for missing classes
+            missing_classes = np.where(all_classes == 0)[0]
+            if len(missing_classes) > 0:
+                print(f"Adding synthetic samples for {len(missing_classes)} missing classes")
+                synthetic_features = np.zeros((len(missing_classes), features.shape[1]))
+                synthetic_prob_labels = missing_classes
+                synthetic_pattern_labels = np.eye(80)[missing_classes]
+                
+                # Append synthetic samples
+                features = np.vstack([features, synthetic_features])
+                prob_labels = np.append(prob_labels, synthetic_prob_labels)
+                pattern_labels = np.vstack([pattern_labels, synthetic_pattern_labels])
+
+            # Print debug information
+            print(f"Debug - prob_labels unique values: {np.unique(prob_labels)}")
+            print(f"Debug - prob_labels shape: {prob_labels.shape}")
+            print(f"Debug - pattern_labels shape: {pattern_labels.shape}")
             
-            # Filter out rows with all zeros
+            # Filter out invalid rows
             valid_mask = np.any(pattern_labels != 0, axis=1)
             features = features[valid_mask]
             prob_labels = prob_labels[valid_mask]
             pattern_labels = pattern_labels[valid_mask]
-
-            # Initialize probabilistic model priors
-            class_counts = np.bincount(prob_labels, minlength=80)  # Ensure 80 classes
-            priors = class_counts / class_counts.sum()
-            self.probabilistic_model.priors = priors
 
             # Split data
             X_train, X_test, y_prob_train, y_prob_test = train_test_split(
                 features, prob_labels,
                 test_size=0.2,
                 random_state=42,
-                shuffle=True
+                shuffle=True,
+                stratify=prob_labels if len(np.unique(prob_labels)) > 1 else None
             )
-        
+            
             # Split pattern labels using same indices
             _, _, y_pattern_train, y_pattern_test = train_test_split(
                 features, pattern_labels,
@@ -888,16 +902,17 @@ class LotteryPredictor:
                 random_state=42,
                 shuffle=True
             )
-        
+
             # Scale features
             X_train_scaled = self.scaler.fit_transform(X_train)
             X_test_scaled = self.scaler.transform(X_test)
-        
-            # Train probabilistic model
+            
+            # Initialize and train probabilistic model
             print("\nTraining probabilistic model...")
+            self.probabilistic_model = GaussianNB()
             self.probabilistic_model.fit(X_train_scaled, y_prob_train)
             prob_score = self.probabilistic_model.score(X_test_scaled, y_prob_test)
-        
+            
             # Train pattern model
             print("\nTraining pattern model...")
             self.pattern_model.fit(X_train_scaled, y_pattern_train)
@@ -917,7 +932,8 @@ class LotteryPredictor:
                 'feature_dimension': features.shape[1],
                 'training_samples': len(X_train),
                 'test_samples': len(X_test),
-                'valid_samples': valid_samples
+                'valid_samples': valid_samples,
+                'classes_represented': len(np.unique(prob_labels))
             })
             
             print(f"\nModel Training Results:")
@@ -926,6 +942,7 @@ class LotteryPredictor:
             print(f"- Training samples: {len(X_train)}")
             print(f"- Test samples: {len(X_test)}")
             print(f"- Features: {features.shape[1]}")
+            print(f"- Classes represented: {len(np.unique(prob_labels))}")
             print(f"- Probabilistic Model Score: {prob_score:.4f}")
             print(f"- Pattern Model Score: {pattern_score:.4f}")
             
@@ -943,9 +960,16 @@ class LotteryPredictor:
     def predict(self, recent_draws):
         """Enhanced prediction with pipeline execution"""
         try:
-            # Ensure pipeline is initialized
-            if not hasattr(self, 'pipeline_stages'):
-                self._initialize_pipeline()
+            # Check if models are trained
+            if self.probabilistic_model is None or not hasattr(self.probabilistic_model, 'class_prior_'):
+                raise ValueError("Models not properly trained. Please train models first.")
+            try:
+                # Ensure pipeline is initialized
+                if not hasattr(self, 'pipeline_stages'):
+                    self._initialize_pipeline()
+            except Exception as e:
+                print(f"Error initializing pipeline: {e}")
+                raise
             
             # Validate input data
             if recent_draws is None:
