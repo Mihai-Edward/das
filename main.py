@@ -292,7 +292,9 @@ def main():
     
     print(f"\nSystem initialized at {system_status['start_time']}")
     
+    # Initialize core components
     collector = KinoDataCollector()
+    handler = DrawHandler()  # Initialize handler once here
     draws = None
 
     while True:
@@ -315,7 +317,7 @@ def main():
                     for i, draw in enumerate(draws, 1):
                         draw_date, numbers = draw
                         print(f"Draw {i}: Date: {draw_date}, Numbers: {', '.join(map(str, numbers))}")
-                        handler = DrawHandler()
+                        # Use the handler initialized at the beginning
                         handler.save_draw_to_csv(draw_date, numbers)
                 else:
                     print("\nFailed to fetch draws")
@@ -328,6 +330,7 @@ def main():
                     print("\nFailed to perform complete analysis")
             
             elif choice == '9':
+                # Use the existing handler instead of creating a new one in check_and_train_model
                 if check_and_train_model():
                     print("\nGenerating ML prediction for next draw...")
                     predictions, probabilities, analysis = train_and_predict()
@@ -348,6 +351,7 @@ def main():
                 print("This will execute steps 3->8->9->10 in sequence")
                 confirm = input("Continue? (y/n): ")
                 if confirm.lower() == 'y':
+                    # Use the existing handler in test_pipeline_integration
                     status = test_pipeline_integration()
                     print("\nPipeline Test Results:")
                     for step, success in status.items():

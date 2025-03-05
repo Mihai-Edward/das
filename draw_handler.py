@@ -46,6 +46,12 @@ class DrawHandler:
             self.pipeline_status['stage'] = 'data_preparation'
             processed_data = self._prepare_pipeline_data(historical_data)
             
+            # 2. Analysis Stage
+            self.pipeline_status['stage'] = 'analysis'
+            analysis_results = {}  # Initialize empty analysis results
+            
+            # 3. Prediction Stage
+            self.pipeline_status['stage'] = 'prediction'
             model_path = self._get_latest_model()
             if model_path:
                 model_files = [
@@ -56,25 +62,29 @@ class DrawHandler:
                 if all(os.path.exists(file) for file in model_files):
                     print(f"✓ Model found: {os.path.basename(model_path)}")
                     predictions, probabilities, analysis_results = self._run_prediction(processed_data)
+                    if predictions is not None:
+                        self.pipeline_status['success'] = True
+                        return predictions, probabilities, analysis_results
                 else:
                     print("Model files incomplete. Attempting retraining...")
-                    return self.train_ml_models()
+                    if self.train_ml_models():
+                        # After training, run prediction again with the new model
+                        return self._run_prediction(processed_data)
             else:
                 print("No model found. Attempting training...")
-                return self.train_ml_models()
+                if self.train_ml_models():
+                    # After training, run prediction with the new model
+                    return self._run_prediction(processed_data)
             
-            if predictions is not None and probabilities is not None:
-                self.pipeline_status['stage'] = 'results_handling'
-                self._handle_pipeline_results(predictions, probabilities, analysis_results)
-                self.pipeline_status['success'] = True
-                return True
-            else:
-                print("Prediction generation failed")
-                return False
+            # If we reach here, prediction failed
+            self.pipeline_status['error'] = "Failed to generate predictions"
+            return None, None, None
+                
         except Exception as e:
             print(f"Error in prediction pipeline: {e}")
             self.pipeline_status['error'] = str(e)
-            return False
+            self.pipeline_status['success'] = False
+            return None, None, None
 
     def train_ml_models(self, force_retrain=False):
         """Train or retrain ML models"""
@@ -350,10 +360,9 @@ def train_and_predict():
         
         # First ensure models are trained
         print("Checking/Training models...")
-        if handler.train_ml_models():
-            print("Models ready")
-        else:
+        if not handler.train_ml_models():
             raise Exception("Model training failed")
+        print("Models ready")
         
         # Generate prediction using pipeline
         print("\nGenerating predictions...")
@@ -372,7 +381,7 @@ def train_and_predict():
                                [probabilities[num - 1] for num in predictions]):
                 print(f"Number {num}: {prob:.4f}")
 
-            # Save predictions using handler
+            # Save predictions
             handler.save_predictions_to_csv(predictions, probabilities, 
                                          next_draw_time.strftime('%Y-%m-%d %H:%M:%S'))
             
