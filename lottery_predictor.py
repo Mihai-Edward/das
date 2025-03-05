@@ -673,37 +673,42 @@ class LotteryPredictor:
             if features.shape[1] != 84:
                 raise ValueError(f"Expected 84 features, got {features.shape[1]}")
                 
-            # Convert labels to multi-label format
+            # Convert labels to integers and validate
+            labels = np.array(labels, dtype=int)
+            if not np.all((labels >= 1) & (labels <= 80)):
+                raise ValueError("Labels must be between 1 and 80")
+                
+            # Create multi-label format
             multi_labels = np.zeros((len(labels), self.num_classes))
-            for i, draw in enumerate(labels):
-                if isinstance(draw, (list, np.ndarray)):
-                    for num in draw:
+            for i, label in enumerate(labels):
+                if isinstance(label, (list, np.ndarray)):
+                    for num in label:
                         if 1 <= num <= self.num_classes:
                             multi_labels[i, num-1] = 1
                 else:
-                    if 1 <= draw <= self.num_classes:
-                        multi_labels[i, draw-1] = 1
-                        
-            print(f"Training data: {len(features)} samples with {features.shape[1]} features")
-            print(f"Labels shape: {multi_labels.shape}")
+                    if 1 <= label <= self.num_classes:
+                        multi_labels[i, label-1] = 1
             
             # Validate label distribution
-            positive_labels = np.sum(multi_labels, axis=1)
-            if not np.all(positive_labels == self.numbers_to_draw):
-                print(f"Warning: Some samples don't have exactly {self.numbers_to_draw} positive labels")
+            labels_per_sample = np.sum(multi_labels, axis=1)
+            print(f"\nLabel distribution:")
+            print(f"- Average labels per sample: {np.mean(labels_per_sample):.2f}")
+            print(f"- Min labels per sample: {np.min(labels_per_sample)}")
+            print(f"- Max labels per sample: {np.max(labels_per_sample)}")
             
-            # Add train-test split with stratification
+            # Split the data
             X_train, X_test, y_train, y_test = train_test_split(
                 features, multi_labels, 
                 test_size=0.2, 
-                random_state=42
+                random_state=42,
+                shuffle=True
             )
             
             # Scale features
             X_train_scaled = self.scaler.fit_transform(X_train)
             X_test_scaled = self.scaler.transform(X_test)
             
-            # Train probabilistic model
+            # Train and evaluate probabilistic model
             print("\nTraining probabilistic model...")
             self.probabilistic_model.fit(X_train_scaled, y_train)
             prob_predictions = self.probabilistic_model.predict(X_test_scaled)
@@ -712,7 +717,7 @@ class LotteryPredictor:
                 for pred in prob_predictions
             ])
             
-            # Train pattern model
+            # Train and evaluate pattern model
             print("\nTraining pattern model...")
             self.pattern_model.fit(X_train_scaled, y_train)
             pattern_predictions = self.pattern_model.predict(X_test_scaled)
@@ -731,23 +736,21 @@ class LotteryPredictor:
                 'feature_dimension': features.shape[1],
                 'training_samples': len(X_train),
                 'test_samples': len(X_test),
-                'label_distribution': {
-                    'mean_positive': float(np.mean(positive_labels)),
-                    'std_positive': float(np.std(positive_labels))
-                },
-                'feature_stats': {
-                    'mean': float(np.mean(features)),
-                    'std': float(np.std(features)),
-                    'min': float(np.min(features)),
-                    'max': float(np.max(features))
+                'label_stats': {
+                    'mean_labels': float(np.mean(labels_per_sample)),
+                    'min_labels': int(np.min(labels_per_sample)),
+                    'max_labels': int(np.max(labels_per_sample))
                 }
             })
             
             print(f"\nModel Training Results:")
-            print(f"- Samples: {len(features)} ({len(X_test)} test samples)")
+            print(f"- Total samples: {len(features)}")
+            print(f"- Training samples: {len(X_train)}")
+            print(f"- Test samples: {len(X_test)}")
             print(f"- Features: {features.shape[1]}")
             print(f"- Probabilistic Model Score: {prob_score:.4f}")
             print(f"- Pattern Model Score: {pattern_score:.4f}")
+            
             return True
             
         except Exception as e:
