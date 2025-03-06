@@ -10,8 +10,12 @@ from config.paths import PATHS, ensure_directories
 
 class DataAnalysis:
     def __init__(self, draws):
-        self.draws = draws
-
+        validated_draws = []
+        for draw_date, numbers in draws:
+            unique_numbers = list(dict.fromkeys(numbers))[:20]  # Remove duplicates and take first 20
+        if len(unique_numbers) == 20 and all(1 <= n <= 80 for n in unique_numbers):
+            validated_draws.append((draw_date, unique_numbers))
+            self.draws = validated_draws
     def count_frequency(self):
         all_numbers = [number for draw in self.draws for number in draw[1]]
         frequency = Counter(all_numbers)

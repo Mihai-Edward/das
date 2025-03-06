@@ -124,7 +124,6 @@ class KinoDataCollector:
                     # Check for duplicates before concatenating
                     if not any(existing_df['date'] == draw_date):
                         combined_df = pd.concat([existing_df, draw_df], ignore_index=True)
-                        # Removed the 24 draws limitation
                         combined_df.to_csv(self.csv_file, index=False)
                     else:
                         print(f"Draw {draw_date} already exists in history")
@@ -146,41 +145,49 @@ class KinoDataCollector:
             self.collection_status['last_error'] = str(e)
             return False
 
-    def fetch_latest_draws(self, num_draws=20, delay=1):
+    def fetch_latest_draws(self, num_draws=99, delay=1):
         driver = None
         try:
             print(f"\nFetching {num_draws} latest draws...")
             self.collection_status['draws_collected'] = 0
             self.update_timestamps()
 
-            # Setup Edge options
+            # Setup Edge options with additional settings
             edge_options = Options()
             edge_options.add_argument('--headless')
             edge_options.add_argument('--disable-gpu')
             edge_options.add_argument('--no-sandbox')
             edge_options.add_argument('--ignore-certificate-errors')
+            edge_options.add_argument('--disable-dev-shm-usage')
+            edge_options.add_argument('--disable-blink-features=AutomationControlled')
+            edge_options.add_argument('--disable-extensions')
+            edge_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+            edge_options.add_experimental_option('useAutomationExtension', False)
 
             # Initialize Edge driver
             service = Service(executable_path=self.driver_path)
             driver = webdriver.Edge(service=service, options=edge_options)
+            driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+                "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0'
+            })
             print("Browser initialized")
 
-            # Load the page
+            # Load the page with explicit wait
             driver.get(self.base_url)
+            time.sleep(5)
             print("Page loaded")
 
-            # Wait for the table to be present
-            wait = WebDriverWait(driver, 40)
-            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#all_results")))
+            # Wait for the table with increased timeout
+            wait = WebDriverWait(driver, 60)
+            table = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#all_results")))
             print("Results table found")
 
-            # Give extra time for JavaScript to load
-            time.sleep(10)
+            # Additional wait for JavaScript
+            time.sleep(15)
 
             draws = []
 
             # Find all draw rows in the results table
-            table = driver.find_element(By.CSS_SELECTOR, "#all_results")
             rows = table.find_elements(By.CSS_SELECTOR, "tbody > tr")
             print(f"Found {len(rows)} rows in the results table")
 
@@ -232,11 +239,60 @@ class KinoDataCollector:
                 except:
                     pass
 
+    def sort_historical_draws(self):
+        """Sort historical draws from newest to oldest"""
+        try:
+            if not os.path.exists(self.csv_file) or os.path.getsize(self.csv_file) == 0:
+                if self.debug:
+                    print("No historical draws file found or file is empty")
+                return False
+                
+            # Read the existing CSV file
+            df = pd.read_csv(self.csv_file)
+            
+            # Convert date strings to datetime for proper sorting
+            df['date_temp'] = pd.to_datetime(
+                df['date'].apply(lambda x: f"{x.split()[1]} {x.split()[0]}"), 
+                format='%d-%m-%Y %H:%M'
+            )
+            
+            # Sort by date descending (newest first)
+            df = df.sort_values('date_temp', ascending=False)
+            
+            # Remove temporary column
+            df = df.drop('date_temp', axis=1)
+            
+            # Save back to CSV
+            df.to_csv(self.csv_file, index=False)
+            
+            if self.debug:
+                print(f"Successfully sorted {len(df)} draws from newest to oldest")
+            return True
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Error sorting draws: {str(e)}")
+            return False
+
 if __name__ == "__main__":
     collector = KinoDataCollector()
+    
+    # First try to sort existing data
+    print("\nSorting historical draws...")
+    collector.sort_historical_draws()
+    
+    # Then fetch new draws
     draws = collector.fetch_latest_draws()
     if draws:
         print("\nCollected draws:")
         for draw_date, numbers in draws:
             print(f"Date: {draw_date}, Numbers: {', '.join(map(str, numbers))}")
-        print("\nCollection Status:", collector.collection_status)
+        
+        # Sort again after collecting new draws
+        print("\nSorting updated historical draws...")
+        if collector.sort_historical_draws():
+            print("Historical draws successfully sorted from newest to oldest")
+        else:
+            print("Error occurred while sorting draws")
+            
+    print("\nCollection Status:", collector.collection_status)
