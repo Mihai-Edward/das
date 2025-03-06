@@ -146,6 +146,7 @@ def save_standardized_prediction(predictions, next_draw_time, probabilities=None
     except Exception as e:
         print(f"Error saving prediction: {e}")
         return False
+
 def evaluate_numbers(historical_data):
     """
     Evaluate numbers based on criteria other than frequency.
@@ -190,13 +191,9 @@ def train_and_predict():
                                [probabilities[num - 1] for num in predictions]):
                 print(f"Number {num}: {prob:.4f}")
 
-            # Save predictions in standardized format
+            # Save predictions in standardized format (remove duplicate saving)
             save_standardized_prediction(predictions, next_draw_time, probabilities)
 
-            # Save predictions using handler (keeping for backward compatibility)
-            handler.save_predictions_to_csv(predictions, probabilities, 
-                                         next_draw_time.strftime('%Y-%m-%d %H:%M:%S'))
-            
             # Handle top 4 numbers if available
             if analysis and 'hot_numbers' in analysis:
                 top_4_numbers = analysis['hot_numbers'][:4]
@@ -354,7 +351,7 @@ def main():
         print("8. Complete Analysis & Save")
         print("9. Get ML prediction")
         print("10. Evaluate prediction accuracy")
-        print("11. Run Complete Pipeline Test")
+        print("11. Run pipeline test")
         print("12. Exit")
         print("==========================\n")
 
