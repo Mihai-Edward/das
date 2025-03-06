@@ -392,9 +392,13 @@ def main():
                     print("\nFailed to prepare model for predictions")
             
             elif choice == '10':
-                evaluator = PredictionEvaluator()
-                evaluator.evaluate_past_predictions()
-            
+                print("\nStarting prediction evaluation...")
+                try:
+                    evaluator = PredictionEvaluator()
+                    evaluator.evaluate_past_predictions()
+                    print("Evaluation complete")
+                except Exception as e:
+                    print(f"\nError during evaluation: {e}")
             elif choice == '11':
                 print("\nRunning complete pipeline...")
                 print("This will execute steps 3->8->9->10 in sequence")

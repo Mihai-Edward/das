@@ -946,13 +946,13 @@ class LotteryPredictor:
                 except Exception as e:
                     print(f"Warning: Error processing row {i}: {e}")
                     continue
-
+    
             # Remove invalid rows (where prob_labels is still -1)
             valid_mask = prob_labels != -1
             features = features[valid_mask]
             prob_labels = prob_labels[valid_mask]
             pattern_labels = pattern_labels[valid_mask]
-
+    
             print(f"\nProcessed {valid_samples} valid samples out of {len(labels)} total samples")
             print(f"Number of unique classes before synthetic: {len(used_classes)}")
             
@@ -964,15 +964,19 @@ class LotteryPredictor:
             print(f"- Classes present: {len(used_classes)}")
             print(f"- Missing classes: {len(missing_classes)}")
             print(f"- Missing class indices: {missing_classes}")
+    
+            # Add synthetic samples for both missing and underrepresented classes
+            underrep_classes = [i for i in range(80) if i in used_classes and np.sum(prob_labels == i) < 5]
+            all_classes_to_supplement = np.unique(np.concatenate([missing_classes, underrep_classes]))
             
-            if len(missing_classes) > 0:
-                print(f"\nAdding synthetic samples for {len(missing_classes)} missing classes")
+            if len(all_classes_to_supplement) > 0:
+                print(f"\nAdding synthetic samples for {len(all_classes_to_supplement)} classes (missing + underrepresented)")
                 
-                # Create multiple synthetic samples per missing class
+                # Create multiple synthetic samples per class
                 samples_per_class = 5
-                total_synthetic = len(missing_classes) * samples_per_class
+                total_synthetic = len(all_classes_to_supplement) * samples_per_class
                 
-                # Initialize synthetic data arrays with correct shapes
+                # Initialize synthetic data arrays
                 synthetic_features = np.zeros((total_synthetic, features.shape[1]))
                 synthetic_prob_labels = np.zeros(total_synthetic, dtype=int)
                 synthetic_pattern_labels = np.zeros((total_synthetic, 80))
@@ -983,8 +987,7 @@ class LotteryPredictor:
                 feature_stds[feature_stds < 0.1] = 0.1  # Set minimum std
                 
                 print("\nGenerating synthetic samples...")
-                # Generate synthetic data
-                for idx, missing_class in enumerate(missing_classes):
+                for idx, class_idx in enumerate(all_classes_to_supplement):
                     start_idx = idx * samples_per_class
                     end_idx = start_idx + samples_per_class
                     
@@ -995,16 +998,13 @@ class LotteryPredictor:
                         (samples_per_class, features.shape[1])
                     )
                     
-                    # Set probabilistic labels for this class
-                    synthetic_prob_labels[start_idx:end_idx] = missing_class
+                    # Set probabilistic labels
+                    synthetic_prob_labels[start_idx:end_idx] = class_idx
                     
-                    # Create pattern labels for this class
+                    # Create pattern labels
                     for i in range(start_idx, end_idx):
-                        # Always include the class number
-                        synthetic_pattern_labels[i, missing_class] = 1
-                        
-                        # Add random additional numbers to reach numbers_to_draw
-                        remaining_positions = list(set(range(80)) - {missing_class})
+                        synthetic_pattern_labels[i, class_idx] = 1
+                        remaining_positions = list(set(range(80)) - {class_idx})
                         additional_positions = np.random.choice(
                             remaining_positions,
                             self.numbers_to_draw - 1,
@@ -1012,32 +1012,20 @@ class LotteryPredictor:
                         )
                         synthetic_pattern_labels[i, additional_positions] = 1
                     
-                    if (idx + 1) % 10 == 0 or (idx + 1) == len(missing_classes):
-                        print(f"Generated samples for {idx + 1}/{len(missing_classes)} classes")
-            
-                # Add debug information before appending
-                print(f"\nBefore appending synthetic data:")
-                print(f"- Original features shape: {features.shape}")
-                print(f"- Synthetic features shape: {synthetic_features.shape}")
-                print(f"- Original prob_labels shape: {prob_labels.shape}")
-                print(f"- Synthetic prob_labels shape: {synthetic_prob_labels.shape}")
+                    if (idx + 1) % 10 == 0 or (idx + 1) == len(all_classes_to_supplement):
+                        print(f"Generated samples for {idx + 1}/{len(all_classes_to_supplement)} classes")
                 
                 # Append synthetic data
                 features = np.vstack([features, synthetic_features])
                 prob_labels = np.append(prob_labels, synthetic_prob_labels)
                 pattern_labels = np.vstack([pattern_labels, synthetic_pattern_labels])
                 
-                print(f"\nAfter appending synthetic data:")
+                print(f"\nAfter synthetic data generation:")
                 print(f"- Total samples: {len(features)}")
                 print(f"- Feature shape: {features.shape}")
                 print(f"- Unique classes: {len(np.unique(prob_labels))}")
                 print(f"- Class distribution: {np.bincount(prob_labels)}")
-
-        # Print debug information
-            print(f"\nDebug - prob_labels unique values: {np.unique(prob_labels)}")
-            print(f"Debug - prob_labels shape: {prob_labels.shape}")
-            print(f"Debug - pattern_labels shape: {pattern_labels.shape}")
-
+    
             # Split data with stratification
             print("\nSplitting data for training...")
             X_train, X_test, y_prob_train, y_prob_test = train_test_split(
@@ -1055,7 +1043,7 @@ class LotteryPredictor:
                 random_state=42,
                 shuffle=True
             )
-
+    
             # Scale features
             print("Scaling features...")
             X_train_scaled = self.scaler.fit_transform(X_train)
@@ -1079,7 +1067,7 @@ class LotteryPredictor:
             ])
             
             # Update training status
-            total_synthetic = len(features) - valid_samples if len(missing_classes) > 0 else 0
+            total_synthetic = len(features) - valid_samples
             self.training_status.update({
                 'success': True,
                 'model_loaded': True,
@@ -1104,6 +1092,7 @@ class LotteryPredictor:
             print(f"- Classes represented: {len(np.unique(prob_labels))}")
             print(f"- Probabilistic Model Score: {prob_score:.4f}")
             print(f"- Pattern Model Score: {pattern_score:.4f}")
+            
             is_valid, message = self.validate_model_state()
             if not is_valid:
                 raise ValueError(f"Model validation failed after training: {message}")
