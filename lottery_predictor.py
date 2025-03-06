@@ -88,6 +88,32 @@ class LotteryPredictor:
         print(f"- Number range: {numbers_range}")
         print(f"- Numbers to draw: {numbers_to_draw}")
         print(f"- Number of classes: {self.num_classes}")
+        
+    def validate_model_state(self):
+        """Validate model state before prediction"""
+        try:
+            # Check if models exist
+            if self.probabilistic_model is None or self.pattern_model is None:
+                return False, "Models not initialized"
+
+            # Check if models are trained
+            if not hasattr(self.probabilistic_model, 'class_prior_') or \
+               not hasattr(self.pattern_model, 'coefs_'):
+                return False, "Models not properly trained"
+
+            # Check scaler
+            if self.scaler is None or not hasattr(self.scaler, 'mean_'):
+                return False, "Scaler not initialized"
+
+            # Validate feature dimensions
+            if hasattr(self.probabilistic_model, 'n_features_in_'):
+                expected_features = self.probabilistic_model.n_features_in_
+                if expected_features != 84:  # Expected feature dimension
+                    return False, f"Invalid feature dimension: {expected_features}"
+
+            return True, "Model state valid"
+        except Exception as e:
+            return False, f"Model validation error: {str(e)}"
     
     def _initialize_pipeline(self):
         """Initialize the prediction pipeline with ordered stages"""
@@ -1078,7 +1104,11 @@ class LotteryPredictor:
             print(f"- Classes represented: {len(np.unique(prob_labels))}")
             print(f"- Probabilistic Model Score: {prob_score:.4f}")
             print(f"- Pattern Model Score: {pattern_score:.4f}")
+            is_valid, message = self.validate_model_state()
+            if not is_valid:
+                raise ValueError(f"Model validation failed after training: {message}")
             
+            print("Model state validation successful")
             return True
             
         except Exception as e:
@@ -1092,10 +1122,16 @@ class LotteryPredictor:
 
     def predict(self, recent_draws):
         """Enhanced prediction with pipeline execution"""
+        
         try:
             # Check if models are trained
             if self.probabilistic_model is None or not hasattr(self.probabilistic_model, 'class_prior_'):
                 raise ValueError("Models not properly trained. Please train models first.")
+            is_valid, message = self.validate_model_state()
+            if not is_valid:
+
+                print(f"Warning: {message}")  # Log the warning but don't fail
+                print("Attempting to continue with existing validation...")
             try:
                 # Ensure pipeline is initialized
                 if not hasattr(self, 'pipeline_stages'):
