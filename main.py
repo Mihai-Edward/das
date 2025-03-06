@@ -331,6 +331,39 @@ def test_pipeline_integration():
         print(f"\nError in pipeline: {str(e)}")
         return pipeline_status
 
+def run_data_collector_standalone():
+    """
+    Run the data collector in standalone mode just like running the data_collector_selenium.py script directly.
+    This function exactly mimics the behavior of the __main__ block in data_collector_selenium.py.
+    """
+    print("\n--- Running Data Collector in Standalone Mode ---")
+    
+    # Create a collector instance
+    collector = KinoDataCollector()
+    
+    # First try to sort existing data
+    print("\nSorting historical draws...")
+    collector.sort_historical_draws()
+    
+    # Then fetch new draws
+    draws = collector.fetch_latest_draws()
+    if draws:
+        print("\nCollected draws:")
+        for draw_date, numbers in draws:
+            print(f"Date: {draw_date}, Numbers: {', '.join(map(str, numbers))}")
+        
+        # Sort again after collecting new draws
+        print("\nSorting updated historical draws...")
+        if collector.sort_historical_draws():
+            print("Historical draws successfully sorted from newest to oldest")
+        else:
+            print("Error occurred while sorting draws")
+            
+    print("\nCollection Status:", collector.collection_status)
+    print("\n--- Data Collection Complete ---")
+    
+    return draws
+
 def main():
     # Initialize system
     system_status = initialize_system()
@@ -345,6 +378,7 @@ def main():
     handler = DrawHandler()  # Initialize handler once here
     draws = None
 
+   
     while True:
         print("\n==========================")
         print("3. Fetch latest draws from lotostats.ro")
@@ -352,23 +386,16 @@ def main():
         print("9. Get ML prediction")
         print("10. Evaluate prediction accuracy")
         print("11. Run pipeline test")
-        print("12. Exit")
+        print("12. Run continuous learning cycle")  # New option
+        print("13. Exit")  # Updated exit option
         print("==========================\n")
 
         try:
-            choice = input("Choose an option (3,8-12): ")
+            choice = input("Choose an option (3,8-13): ")
             
             if choice == '3':
-                draws = collector.fetch_latest_draws()
-                if draws:
-                    print("\nDraws collected successfully:")
-                    for i, draw in enumerate(draws, 1):
-                        draw_date, numbers = draw
-                        print(f"Draw {i}: Date: {draw_date}, Numbers: {', '.join(map(str, numbers))}")
-                        # Use the handler initialized at the beginning
-                        handler.save_draw_to_csv(draw_date, numbers)
-                else:
-                    print("\nFailed to fetch draws")
+                # Run data collector in standalone mode to mimic behavior of data_collector_selenium.py
+                draws = run_data_collector_standalone()
             
             elif choice == '8':
                 success = perform_complete_analysis(draws)
@@ -379,6 +406,7 @@ def main():
             
             elif choice == '9':
                 # Use the existing handler instead of creating a new one in check_and_train_model
+                                # Use the existing handler instead of creating a new one in check_and_train_model
                 if check_and_train_model():
                     print("\nGenerating ML prediction for next draw...")
                     predictions, probabilities, analysis = train_and_predict()
@@ -398,6 +426,7 @@ def main():
                     print("Evaluation complete")
                 except Exception as e:
                     print(f"\nError during evaluation: {e}")
+                    
             elif choice == '11':
                 print("\nRunning complete pipeline...")
                 print("This will execute steps 3->8->9->10 in sequence")
@@ -414,11 +443,28 @@ def main():
                     else:
                         print("\nSome pipeline steps failed. Check the results above.")
             
+             
             elif choice == '12':
+                print("\nRunning continuous learning cycle...")
+                if handler.run_continuous_learning_cycle():
+                    metrics = handler.get_learning_metrics()
+                    print("\nContinuous Learning Results:")
+                    print(f"- Learning cycles completed: {metrics['cycles_completed']}")
+                    print(f"- Current prediction accuracy: {metrics['current_accuracy']:.2f}%" if metrics['current_accuracy'] else "- Current accuracy: Not available")
+                    print(f"- Total improvement: {metrics['improvement_rate']:.2f}%" if metrics['improvement_rate'] else "- Total improvement: Not available")
+                    print("\nMost recent adjustments:")
+                    if metrics['last_adjustments']:
+                        for adj in metrics['last_adjustments']:
+                            print(f"- {adj}")
+                    else:
+                        print("- No adjustments made")
+                else:
+                    print("\nContinuous learning cycle did not complete successfully")
+            elif choice == '13':
                 print("\nExiting program...")
                 sys.exit(0)
             else:
-                print("\nInvalid option. Please choose 3,8-12")
+                print("\nInvalid option. Please choose 3,8-13")
 
         except Exception as e:
             print(f"\nAn error occurred: {str(e)}")
