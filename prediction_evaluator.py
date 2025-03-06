@@ -19,12 +19,13 @@ from config.paths import PATHS, ensure_directories
 class PredictionEvaluator:
     def __init__(self):
         # Use PATHS configuration for relative paths
-        self.predictions_file = os.path.join(os.path.dirname(PATHS['PREDICTIONS']), 'predicted_draws.csv')
+       def __init__(self):
+    # Use PATHS configuration for relative paths
+        self.predictions_file = PATHS['PREDICTIONS']  # Use the standardized predictions file
         self.historical_file = PATHS['HISTORICAL_DATA']
         self.results_dir = os.path.dirname(PATHS['PREDICTIONS'])
-        self.results_file = os.path.join(self.results_dir, 'prediction_results.xlsx')
+        self.results_file = PATHS['ANALYSIS']
         self.analysis_file = PATHS['ANALYSIS']
-        
         # Ensure directories exist
         ensure_directories()
         

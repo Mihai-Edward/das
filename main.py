@@ -101,49 +101,51 @@ def save_top_4_numbers_to_excel(top_4_numbers, file_path=None):
 
 def save_standardized_prediction(predictions, next_draw_time, probabilities=None):
     """
-    Save predictions in the same format as historical draws
-    Format: number1,number2,...,number20,date
+    Save predictions in standardized format to a single file (predictions.csv)
+    Format: Date,Predicted_Numbers,Probabilities
     """
     try:
         # Create predictions directory if it doesn't exist
         predictions_dir = os.path.dirname(PATHS['PREDICTIONS'])
         os.makedirs(predictions_dir, exist_ok=True)
         
-        # Prepare the data in historical format
+        # Prepare the data in standardized format
         sorted_predictions = sorted(predictions)
         formatted_date = next_draw_time.strftime('%H:%M %d-%m-%Y')
         
-        # Create DataFrame in historical format
-        historical_format = pd.DataFrame([sorted_predictions + [formatted_date]])
-        historical_file = os.path.join(predictions_dir, 'predicted_draws.csv')
+        # Create data dictionary for DataFrame
+        prediction_data = {
+            'Date': [formatted_date],
+            'Predicted_Numbers': [','.join(map(str, sorted_predictions))]
+        }
         
-        # Save in historical format
-        mode = 'a' if os.path.exists(historical_file) else 'w'
-        historical_format.to_csv(historical_file, mode=mode, header=False, index=False)
-        
-        # Save detailed prediction log with probabilities
+        # Add probabilities if they exist
         if probabilities is not None:
-            detailed_file = os.path.join(predictions_dir, 'prediction_details.csv')
-            detailed_data = {
-                'Date': [formatted_date],
-                'Numbers': [','.join(map(str, sorted_predictions))],
-                'Individual_Probabilities': [','.join(f"{num}:{probabilities[num-1]:.4f}" 
-                                                    for num in sorted_predictions)]
-            }
-            detailed_df = pd.DataFrame(detailed_data)
-            mode = 'a' if os.path.exists(detailed_file) else 'w'
-            header = not os.path.exists(detailed_file)
-            detailed_df.to_csv(detailed_file, mode=mode, header=header, index=False)
+            probability_str = ','.join(f"{probabilities[num-1]:.4f}" for num in sorted_predictions)
+            prediction_data['Probabilities'] = [probability_str]
+        else:
+            prediction_data['Probabilities'] = ['']
         
-        print(f"\nPrediction saved in historical format to: {historical_file}")
+        # Create DataFrame
+        df = pd.DataFrame(prediction_data)
+        
+        # Save to single predictions file
+        prediction_file = PATHS['PREDICTIONS']
+        mode = 'a' if os.path.exists(prediction_file) else 'w'
+        header = not os.path.exists(prediction_file)
+        df.to_csv(prediction_file, mode=mode, header=header, index=False)
+        
+        print(f"\nPrediction saved to: {prediction_file}")
+        print(f"Date: {formatted_date}")
+        print(f"Numbers: {','.join(map(str, sorted_predictions))}")
         if probabilities is not None:
-            print(f"Detailed prediction log saved to: {detailed_file}")
+            print("Probabilities included")
+        
         return True
         
     except Exception as e:
-        print(f"Error saving standardized prediction: {e}")
+        print(f"Error saving prediction: {e}")
         return False
-
 def evaluate_numbers(historical_data):
     """
     Evaluate numbers based on criteria other than frequency.

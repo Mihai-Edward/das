@@ -19,7 +19,7 @@ PATHS = {
     # Add new paths for clarity
     'PROCESSED_DIR': os.path.join(BASE_DIR, "data", "processed"),
     'SRC_DIR': os.path.join(BASE_DIR, "src"),
-    'PREDICTED_DRAWS': os.path.join(BASE_DIR, "data", "processed", "predicted_draws.csv"),
+
 }
 
 def ensure_directories():
