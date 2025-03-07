@@ -2,7 +2,7 @@ import os
 import sys
 import signal
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import argparse
 
@@ -30,6 +30,41 @@ except ImportError as e:
     print(f"Project root: {project_root}")
     sys.exit(1)
 
+def ensure_models_trained():
+    """Ensure models are properly trained before proceeding."""
+    print("\nChecking model state...")
+    
+    from src.lottery_predictor import LotteryPredictor
+    from src.draw_handler import DrawHandler
+    
+    handler = DrawHandler()
+    try:
+        # Check if model exists and passes validation
+        predictor = LotteryPredictor()
+        model_path = handler._get_latest_model()
+        
+        if model_path and predictor.load_models(model_path):
+            is_valid, message = predictor.validate_model_state()
+            if is_valid:
+                print("✓ Models validated successfully")
+                return True
+        
+        # Model doesn't exist or validation failed, train new models
+        print("! Models need training. Training new models...")
+        success = handler.train_ml_models(force_retrain=True)
+        if success:
+            print("✓ Models trained successfully")
+            return True
+        else:
+            print("✗ Model training failed")
+            return False
+    
+    except Exception as e:
+        print(f"✗ Error checking/training models: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 def setup_parser():
     """Set up command line argument parser."""
     parser = argparse.ArgumentParser(
@@ -37,6 +72,7 @@ def setup_parser():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
+    # Basic configuration arguments
     parser.add_argument(
         '--max-failures',
         type=int,
@@ -65,17 +101,31 @@ def setup_parser():
         help='Number of retries for fetching draw results'
     )
     
+    # Special mode arguments
     parser.add_argument(
         '--test',
         action='store_true',
         help='Run in test mode without starting the cycle'
     )
     
+    parser.add_argument(
+        '--debug-models',
+        action='store_true',
+        help='Run model debugging mode'
+    )
+
+    # New argument for continuous learning
+    parser.add_argument(
+        '--enable-learning',
+        action='store_true',
+        help='Enable continuous learning to improve model based on past predictions'
+    )
+    
     return parser
 
 def get_formatted_time_remaining(target_time):
     """Calculate and format time remaining until target time."""
-    now = datetime.now()
+    now = datetime.now(pytz.UTC)
     if target_time <= now:
         return "0m 0s"
     
@@ -90,7 +140,7 @@ def display_header():
     print("      AUTOMATED LOTTERY PREDICTION SYSTEM")
     print("="*50)
     
-    now = datetime.now()
+    now = datetime.now(pytz.UTC)
     scheduler = DrawScheduler()
     next_draw = scheduler.get_next_draw_time(now)
     eval_time = scheduler.get_evaluation_time(next_draw)
@@ -117,16 +167,113 @@ def graceful_shutdown(signum, frame):
     print("Please wait for current operation to complete...")
     sys.exit(0)
 
+def debug_models():
+    """Debug model loading and validation issues."""
+    try:
+        print("\n===== MODEL DEBUG MODE =====")
+        
+        from src.lottery_predictor import LotteryPredictor
+        from src.draw_handler import DrawHandler
+        
+        # Check model files
+        print("\nChecking model files:")
+        handler = DrawHandler()
+        model_path = handler._get_latest_model()
+        print(f"Latest model path: {model_path}")
+        
+        if model_path:
+            model_files = [
+                f"{model_path}_prob_model.pkl",
+                f"{model_path}_pattern_model.pkl",
+                f"{model_path}_scaler.pkl"
+            ]
+            
+            for file in model_files:
+                if os.path.exists(file):
+                    file_size = os.path.getsize(file)
+                    print(f"✓ {os.path.basename(file)} - {file_size} bytes")
+                else:
+                    print(f"✗ {os.path.basename(file)} - Missing")
+        
+        # Try manual model loading
+        print("\nTrying direct model loading:")
+        predictor = LotteryPredictor()
+        loaded = predictor.load_models(model_path)
+        print(f"Model loading result: {loaded}")
+        
+        # Validate model state
+        print("\nValidating model state:")
+        is_valid, message = predictor.validate_model_state()
+        print(f"Model valid: {is_valid}")
+        print(f"Validation message: {message}")
+        
+        # Check model attributes
+        print("\nModel attributes:")
+        if hasattr(predictor, 'probabilistic_model'):
+            print(f"Probabilistic model type: {type(predictor.probabilistic_model).__name__}")
+            if hasattr(predictor.probabilistic_model, 'class_prior_'):
+                print("✓ class_prior_ attribute exists")
+            else:
+                print("✗ class_prior_ attribute missing")
+        
+        if hasattr(predictor, 'pattern_model'):
+            print(f"Pattern model type: {type(predictor.pattern_model).__name__}")
+            if hasattr(predictor.pattern_model, 'coefs_'):
+                print("✓ coefs_ attribute exists")
+            else:
+                print("✗ coefs_ attribute missing")
+        
+        print("\nAttempting to train models:")
+        try:
+            # Load some data for training
+            import pandas as pd
+            data_file = os.path.join(src_dir, 'historical_draws.csv')
+            historical_data = pd.read_csv(data_file)
+            print(f"Loaded {len(historical_data)} records for training")
+            
+            # Try training
+            features, labels = predictor.prepare_data(historical_data)
+            if features is not None and labels is not None:
+                print(f"Prepared features shape: {features.shape}")
+                print(f"Prepared labels shape: {labels.shape}")
+                
+                success = predictor.train_models(features, labels)
+                print(f"Model training result: {success}")
+                
+                # Try validating again
+                is_valid, message = predictor.validate_model_state()
+                print(f"After training - Model valid: {is_valid}")
+                print(f"Validation message: {message}")
+        except Exception as e:
+            print(f"Error during training: {e}")
+        
+        print("\n===== END DEBUG MODE =====")
+        
+    except Exception as e:
+        print(f"\nError in debug_models: {e}")
+        import traceback
+        traceback.print_exc()
+
 def run_automation(args):
     """Run the main automation cycle with provided arguments."""
     display_header()
     
+    # Check debug mode first
+    if args.debug_models:
+        debug_models()
+        return
+    
+    # Then check test mode    
     if args.test:
         print("Running in TEST MODE - automation cycle will not start.")
         print("Checking configuration and imports...")
         
         try:
             test_operation()
+            
+            # Ensure models are trained
+            if not ensure_models_trained():
+                print("Warning: Model check/training failed, but continuing test...")
             
             manager = PredictionCycleManager()
             status = manager.get_status()
@@ -147,10 +294,16 @@ def run_automation(args):
             traceback.print_exc()
         return
     
+    # Normal operation mode
     try:
         # Set up signal handlers
         signal.signal(signal.SIGINT, graceful_shutdown)
         signal.signal(signal.SIGTERM, graceful_shutdown)
+        
+        # Ensure models are properly trained
+        if not ensure_models_trained():
+            print("\nFailed to ensure models are trained. Exiting.")
+            return
         
         # Configure the cycle manager
         manager = PredictionCycleManager()
@@ -158,6 +311,11 @@ def run_automation(args):
         manager.retry_delay = args.retry_delay
         manager.scheduler.post_draw_wait_seconds = args.post_draw_wait
         manager.fetch_retries = args.fetch_retries
+        
+        # Enable continuous learning if requested
+        manager.continuous_learning_enabled = args.enable_learning
+        if args.enable_learning:
+            print("\nContinuous learning is ENABLED")
         
         # Add UTC time handling
         current_utc = datetime.now(pytz.UTC)
@@ -167,6 +325,7 @@ def run_automation(args):
         print(f"- Post-draw wait: {manager.scheduler.post_draw_wait_seconds} seconds")
         print(f"- Draw interval: {manager.scheduler.draw_interval_minutes} minutes")
         print(f"- Fetch retries: {manager.fetch_retries}")
+        print(f"- Continuous learning: {'Enabled' if manager.continuous_learning_enabled else 'Disabled'}")
         
         print("\nStarting automation cycle...\n")
         manager.run_cycle()

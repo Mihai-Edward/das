@@ -1,161 +1,143 @@
-# File: automation/operations.py
+# automation/operations.py
+
 import os
 import sys
 import time
 from datetime import datetime, timedelta
-import pytz
 
-# Add src directory directly to Python path
+# Add project root to path if necessary
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
-src_dir = os.path.join(project_root, 'src')
-sys.path.insert(0, src_dir)  # Add src directory directly
-sys.path.insert(0, project_root)  # Also add project root
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-# Now the imports should work correctly
+# Import necessary modules
 from config.paths import PATHS, ensure_directories
-from src.draw_handler import DrawHandler, save_draw_to_csv, perform_complete_analysis, train_and_predict
-from src.data_collector_selenium import KinoDataCollector
-from src.prediction_evaluator import PredictionEvaluator
-from automation.scheduler import DrawScheduler
 
-# In automation/operations.py
+def test_operation():
+    """Test operation to verify imports and configuration."""
+    print("\nTesting operations module...")
+    
+    # Verify paths configuration
+    ensure_directories()
+    
+    # Test importing critical modules
+    try:
+        from src.draw_handler import DrawHandler
+        from src.lottery_predictor import LotteryPredictor
+        from src.data_collector_selenium import KinoDataCollector
+        print("✓ All required modules imported successfully")
+    except ImportError as e:
+        print(f"✗ Import error: {e}")
+        raise
+        
+    return True
 
-def fetch_latest_draws(max_retries=3, retry_delay=10):
-    """
-    Mirror the working data_collector_selenium.py functionality
-    """
+def collect_data_operation(num_draws=10):
+    """Collect data from website using selenium."""
     try:
         print("\n[Automation] Fetching latest draws from website...")
+        
+        # Import collector after path setup
+        from src.data_collector_selenium import KinoDataCollector
+        
+        # Initialize collector
         collector = KinoDataCollector()
         
-        # First sort existing historical draws
+        # First sort existing data
         print("[Automation] Sorting historical draws...")
         collector.sort_historical_draws()
         
-        # Then fetch new draws with the proven working method
-        draws = collector.fetch_latest_draws(num_draws=1)  # Get latest draw
-        
+        # Get latest draws
+        draws = collector.fetch_latest_draws(num_draws=num_draws)
         if not draws:
-            print("[Automation] No draws fetched after all attempts.")
-            return False, "No draws fetched"
+            return False, "Failed to fetch draws"
             
-        print(f"[Automation] Fetched {len(draws)} draws from website.")
-        
-        # Sort again after collecting new draws
+        # Sort again after adding new data
         print("[Automation] Sorting updated historical draws...")
         if collector.sort_historical_draws():
             print("[Automation] Historical draws successfully sorted from newest to oldest")
         else:
-            print("[Automation] Error occurred while sorting draws")
+            print("[Automation] Warning: Failed to sort draws, but continuing")
             
-        print("\nCollection Status:", collector.collection_status)
-        return True, draws
-
+        print(f"[Automation] Fetched {len(draws)} draws from website.")
+        return True, f"Successfully collected {len(draws)} draws"
+        
     except Exception as e:
-        error_msg = f"Error fetching latest draws: {str(e)}"
+        error_msg = f"Error collecting data: {str(e)}"
         print(f"[Automation] {error_msg}")
         return False, error_msg
 
-def perform_analysis(draws=None):
-    """
-    Perform complete analysis on draws.
-    
-    Args:
-        draws: Optional list of draws to analyze. If None, uses draws from CSV.
-        
-    Returns:
-        tuple: (success, result)
-            - success (bool): True if operation succeeded
-            - result: None if successful, error message if failed
-    """
+def analyze_data_operation():
+    """Perform analysis on collected data."""
     try:
         print("\n[Automation] Performing complete analysis...")
-        success = perform_complete_analysis(draws)
         
-        if success:
-            print("[Automation] Analysis completed successfully.")
-            return True, None
-        else:
-            error_msg = "Analysis failed to complete."
-            print(f"[Automation] {error_msg}")
-            return False, error_msg
+        # Import handler after path setup
+        from src.draw_handler import DrawHandler
+        from src.data_collector_selenium import KinoDataCollector
+        
+        # Get draws from collector
+        collector = KinoDataCollector()
+        draws = collector.fetch_latest_draws(num_draws=100, use_cached=True)
+        
+        if not draws:
+            return False, "No draws available for analysis"
             
+        # Use handler to perform analysis
+        handler = DrawHandler()
+        from src.draw_handler import perform_complete_analysis
+        
+        if perform_complete_analysis(draws):
+            print("[Automation] Analysis completed successfully.")
+            return True, "Analysis completed successfully"
+        else:
+            return False, "Failed to complete analysis"
+        
     except Exception as e:
-        error_msg = f"Error performing analysis: {str(e)}"
+        error_msg = f"Error in analysis: {str(e)}"
         print(f"[Automation] {error_msg}")
         return False, error_msg
 
-def generate_prediction(for_draw_time=None):
-    """
-    Generate prediction for next draw.
-    
-    Args:
-        for_draw_time: Optional datetime for target draw
-    
-    Returns:
-        tuple: (success, result)
-            - success (bool): True if operation succeeded
-            - result: (predictions, probabilities, analysis) if successful,
-                     error message if failed
-    """
+def generate_prediction_operation(for_draw_time=None):
+    """Generate ML prediction for next draw."""
     try:
         print("\n[Automation] Generating ML prediction...")
+        
+        # Import handler after path setup
         from src.draw_handler import DrawHandler
+        
+        # Initialize handler
         handler = DrawHandler()
-        predictions, probabilities, analysis = handler.handle_prediction_pipeline()
-
-        # Set target draw time
-        if for_draw_time is None:
-            current_time = datetime.now(pytz.UTC)
-            scheduler = DrawScheduler()
-            for_draw_time = scheduler.get_next_draw_time(current_time)
-
-        # Ensure models are trained
-        if not handler._get_latest_model():
-            print("[Automation] No models found. Training models...")
-            if not handler.train_ml_models():
-                return False, "Model training failed"
-                
-        # Generate prediction
+        
+        # Use handler to generate prediction
         predictions, probabilities, analysis = handler.handle_prediction_pipeline()
         
-        if predictions is None or len(predictions) == 0:
-            print("[Automation] Failed to generate predictions.")
-            return False, "No predictions generated"
+        if predictions is not None:
+            print(f"[Automation] Generated prediction: {sorted(predictions)}")
             
-        # Save predictions with UTC timestamp
-        timestamp = for_draw_time.strftime('%Y-%m-%d %H:%M:%S')
-        handler.save_predictions_to_csv(predictions, probabilities, timestamp)
-        
-        # Display basic info
-        print(f"[Automation] Generated prediction: {sorted(predictions)}")
-        print(f"[Automation] For draw at: {timestamp} UTC")
-        
-        return True, (predictions, probabilities, analysis)
+            # Format draw time for logging
+            if for_draw_time:
+                print(f"[Automation] For draw at: {for_draw_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+                
+            return True, {"predictions": predictions, "probabilities": probabilities, "analysis": analysis}
+        else:
+            return False, "Failed to generate prediction"
         
     except Exception as e:
         error_msg = f"Error generating prediction: {str(e)}"
         print(f"[Automation] {error_msg}")
         return False, error_msg
 
-def evaluate_prediction(draw_time=None):
-    """
-    Evaluate prediction accuracy.
-    
-    Args:
-        draw_time: Optional datetime of draw to evaluate
-    
-    Returns:
-        tuple: (success, result)
-            - success (bool): True if operation succeeded
-            - result: Evaluation stats if successful, error message if failed
-    """
+def evaluate_prediction_operation():
+    """Evaluate past predictions against actual draws."""
     try:
-        print("\n[Automation] Evaluating prediction...")
-        if draw_time:
-            print(f"[Automation] Evaluating draw from: {draw_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-            
+        print("\n[Automation] Evaluating past predictions...")
+        
+        # Import evaluator after path setup
+        from src.prediction_evaluator import PredictionEvaluator
+        
+        # Create evaluator and run evaluation
         evaluator = PredictionEvaluator()
         evaluator.evaluate_past_predictions()
         
@@ -163,41 +145,77 @@ def evaluate_prediction(draw_time=None):
         stats = evaluator.get_performance_stats()
         
         if stats:
-            print(f"[Automation] Evaluation complete. Last accuracy: {stats.get('average_accuracy', 0):.2f}%")
+            print("\n[Automation] Evaluation Summary:")
+            print(f"- Total predictions evaluated: {stats.get('total_predictions', 0)}")
+            print(f"- Average correct numbers: {stats.get('average_correct', 0):.1f}")
+            print(f"- Best prediction: {stats.get('best_prediction', 0)} correct numbers")
+            print(f"- Average accuracy: {stats.get('average_accuracy', 0):.1f}%")
+            if 'recent_trend' in stats:
+                trend = stats['recent_trend']
+                print(f"- Recent trend: {'Improving' if trend > 0 else 'Declining'} ({trend:.3f})")
+            
             return True, stats
         else:
-            print("[Automation] Evaluation complete but no stats available.")
-            return True, None
-            
+            return False, "No evaluation statistics available"
+        
     except Exception as e:
-        error_msg = f"Error evaluating prediction: {str(e)}"
+        error_msg = f"Error in evaluation: {str(e)}"
         print(f"[Automation] {error_msg}")
         return False, error_msg
 
-def test_operation():
-    """Test importing and basic functionality."""
+def run_continuous_learning():
+    """Run the continuous learning cycle to improve predictions."""
     try:
-        print("Operations module imported successfully!")
-        ensure_directories()
-        print("Directories checked successfully!")
-        return True
+        print("\n[Automation] Running continuous learning cycle...")
+        
+        # Import handler after path setup
+        from src.draw_handler import DrawHandler
+        
+        # Initialize handler
+        handler = DrawHandler()
+        
+        # Run continuous learning cycle
+        success = handler.run_continuous_learning_cycle()
+        
+        if success:
+            # Get metrics to display
+            metrics = handler.get_learning_metrics()
+            print("\n[Automation] Continuous Learning Results:")
+            print(f"- Learning cycles completed: {metrics.get('cycles_completed', 0)}")
+            
+            if metrics.get('current_accuracy') is not None:
+                print(f"- Current prediction accuracy: {metrics['current_accuracy']:.2f}%")
+                
+            if metrics.get('improvement_rate') is not None:
+                print(f"- Total improvement: {metrics['improvement_rate']:.2f}%")
+                
+            print("\n[Automation] Most recent adjustments:")
+            if metrics.get('last_adjustments') and len(metrics['last_adjustments']) > 0:
+                for adj in metrics['last_adjustments']:
+                    print(f"- {adj}")
+            else:
+                print("- No adjustments made")
+                
+            return True, "Continuous learning completed successfully"
+        else:
+            return False, "Continuous learning cycle failed or made no improvements"
+        
     except Exception as e:
-        print(f"Error testing operations: {str(e)}")
-        return False
+        error_msg = f"Error in continuous learning: {str(e)}"
+        print(f"[Automation] {error_msg}")
+        return False, error_msg
 
 if __name__ == "__main__":
-    # Test the operations module
+    # For testing the operations module
+    print("Testing operations module...")
     test_operation()
-    
-    # Optional: Test individual operations
-    # success, result = fetch_latest_draws()
-    # print(f"Fetch success: {success}")
-    
-    # success, result = perform_analysis()
-    # print(f"Analysis success: {success}")
-    
-    # success, result = generate_prediction()
-    # print(f"Prediction success: {success}")
-    
-    # success, result = evaluate_prediction()
-    # print(f"Evaluation success: {success}")
+    print("Running data collection...")
+    collect_data_operation(num_draws=2)
+    print("Running analysis...")
+    analyze_data_operation()
+    print("Generating prediction...")
+    generate_prediction_operation()
+    print("Evaluating predictions...")
+    evaluate_prediction_operation()
+    print("Running continuous learning...")
+    run_continuous_learning()
