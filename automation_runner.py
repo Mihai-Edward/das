@@ -7,6 +7,7 @@ import signal
 import logging
 from datetime import datetime
 import traceback
+import pytz
 
 # Add src directory directly to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,15 +16,16 @@ src_dir = os.path.join(project_root, 'src')
 sys.path.insert(0, src_dir)  # Add src directory directly
 sys.path.insert(0, project_root)  # Also add project root
 
-# Now the imports should work correctly
+# Now import core components from src
 from config.paths import PATHS, ensure_directories
 from draw_handler import DrawHandler, perform_complete_analysis, train_and_predict
 from data_collector_selenium import KinoDataCollector
 from prediction_evaluator import PredictionEvaluator
 
-# Import components
-from automation.cycle_manager import PredictionCycleManager
-
+# Import automation components using relative imports
+from .cycle_manager import PredictionCycleManager
+from .scheduler import DrawScheduler, get_formatted_time_remaining
+from .operations import test_operation  # Using relative import for operations
 def setup_parser():
     """Set up command line argument parser."""
     parser = argparse.ArgumentParser(
@@ -53,6 +55,13 @@ def setup_parser():
     )
     
     parser.add_argument(
+        '--fetch-retries',
+        type=int,
+        default=3,
+        help='Number of retries for fetching draw results'
+    )
+    
+    parser.add_argument(
         '--test',
         action='store_true',
         help='Run in test mode without starting the cycle'
@@ -67,7 +76,15 @@ def display_header():
     print("      AUTOMATED LOTTERY PREDICTION SYSTEM")
     print("="*50)
     
-    print(f"\nCurrent time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    now = datetime.now()
+    scheduler = DrawScheduler()
+    next_draw = scheduler.get_next_draw_time(now)
+    eval_time = scheduler.get_evaluation_time(next_draw)
+    
+    print(f"\nCurrent time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Next draw at: {next_draw.strftime('%H:%M:%S')}")
+    print(f"Next evaluation at: {eval_time.strftime('%H:%M:%S')}")
+    print(f"Time until next draw: {get_formatted_time_remaining(next_draw)}")
     print(f"System directory: {current_dir}")
     
     # Check if required directories exist
@@ -81,6 +98,15 @@ def display_header():
     print("="*50 + "\n")
 
 
+def graceful_shutdown(signum, frame):
+    """Handle shutdown signals gracefully."""
+    print("\nReceived shutdown signal. Cleaning up...")
+    print("Please wait for current operation to complete...")
+    # Signal the cycle manager to stop gracefully
+    global should_run
+    should_run = False
+
+
 def run_automation(args):
     """Run the main automation cycle with provided arguments."""
     display_header()
@@ -89,11 +115,8 @@ def run_automation(args):
         print("Running in TEST MODE - automation cycle will not start.")
         print("Checking configuration and imports...")
         
-        # Test import all required components
         try:
-            # CHANGE THIS LINE - use correct import approach
-            # Import directly since we already added project_root to sys.path
-            from operations import test_operation  # Changed from automation.operations
+            from .operations import test_operation
             test_operation()
             
             manager = PredictionCycleManager()
@@ -101,24 +124,43 @@ def run_automation(args):
             
             print("\nTest successful! Components loaded correctly.")
             print(f"Next draw calculations working: {manager.scheduler.get_next_draw_time().strftime('%H:%M:%S')}")
-            print("Run without --test flag to start the automation cycle.")
+            
+            # Test fetch operation
+            collector = KinoDataCollector()
+            print("\nTesting data collection...")
+            draws = collector.fetch_latest_draws(num_draws=1)
+            if draws:
+                print("Data collection test successful!")
+            
+            print("\nAll tests passed. Run without --test flag to start the automation cycle.")
         except Exception as e:
             print(f"Test failed with error: {str(e)}")
             traceback.print_exc()
         return
     
     try:
+        # Set up signal handlers
+        signal.signal(signal.SIGINT, graceful_shutdown)
+        signal.signal(signal.SIGTERM, graceful_shutdown)
+        
         # Configure and start the cycle manager
         manager = PredictionCycleManager()
         manager.max_failures = args.max_failures
         manager.retry_delay = args.retry_delay
         manager.scheduler.post_draw_wait_seconds = args.post_draw_wait
-        
+        # Add UTC time handling
+        current_utc = datetime.now(pytz.UTC)
+        print(f"\nStarting automation with configuration (UTC time: {current_utc.strftime('%Y-%m-%d %H:%M:%S')}):")
+        print(f"- Maximum consecutive failures: {manager.max_failures}")
+        print(f"- Retry delay: {manager.retry_delay} seconds")
+        print(f"- Post-draw wait: {manager.scheduler.post_draw_wait_seconds} seconds")
+        print(f"- Draw interval: {manager.scheduler.draw_interval_minutes} minutes")
         print(f"Starting automation with configuration:")
         print(f"- Maximum consecutive failures: {manager.max_failures}")
         print(f"- Retry delay: {manager.retry_delay} seconds")
         print(f"- Post-draw wait: {manager.scheduler.post_draw_wait_seconds} seconds")
         print(f"- Draw interval: {manager.scheduler.draw_interval_minutes} minutes")
+        print(f"- Fetch retries: {args.fetch_retries}")
         
         # Start the automation cycle
         print("\nStarting automation cycle...\n")
@@ -137,6 +179,7 @@ def run_automation(args):
 
 
 if __name__ == "__main__":
+    should_run = True  # Global flag for graceful shutdown
     parser = setup_parser()
     args = parser.parse_args()
     run_automation(args)

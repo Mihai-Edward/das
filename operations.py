@@ -2,7 +2,9 @@
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+
+import pytz
 
 # Add src directory directly to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,10 +18,12 @@ from config.paths import PATHS, ensure_directories
 from draw_handler import DrawHandler, save_draw_to_csv, perform_complete_analysis, train_and_predict
 from data_collector_selenium import KinoDataCollector
 from prediction_evaluator import PredictionEvaluator
+from automation.scheduler import DrawScheduler
 
-def fetch_latest_draws():
+def fetch_latest_draws(max_retries=3, retry_delay=10):
     """
     Programmatic version of menu option 3 - Fetch latest draws from website.
+    Added retry mechanism to ensure site is updated.
     
     Returns:
         tuple: (success, result)
@@ -29,10 +33,24 @@ def fetch_latest_draws():
     try:
         print("\n[Automation] Fetching latest draws from website...")
         collector = KinoDataCollector()
-        draws = collector.fetch_latest_draws()
+        
+        # Initialize variables for retry logic
+        draws = None
+        attempts = 0
+        
+        while attempts < max_retries:
+            draws = collector.fetch_latest_draws()
+            
+            if draws and len(draws) > 0:
+                break
+                
+            attempts += 1
+            if attempts < max_retries:
+                print(f"[Automation] Retry {attempts}/{max_retries} in {retry_delay} seconds...")
+                time.sleep(retry_delay)
         
         if not draws:
-            print("[Automation] No draws fetched.")
+            print("[Automation] No draws fetched after all attempts.")
             return False, "No draws fetched"
             
         print(f"[Automation] Fetched {len(draws)} draws from website.")
@@ -43,6 +61,7 @@ def fetch_latest_draws():
             
         print("[Automation] Draws saved to CSV.")
         return True, draws
+        
     except Exception as e:
         error_msg = f"Error fetching latest draws: {str(e)}"
         print(f"[Automation] {error_msg}")
@@ -79,9 +98,13 @@ def perform_analysis(draws=None):
         return False, error_msg
 
 
-def generate_prediction():
+def generate_prediction(for_draw_time=None):
     """
     Programmatic version of menu option 9 - Generate ML prediction.
+    Added draw_time parameter to track prediction target.
+    
+    Args:
+        for_draw_time: Optional datetime of the draw we're predicting for
     
     Returns:
         tuple: (success, result)
@@ -92,7 +115,10 @@ def generate_prediction():
     try:
         print("\n[Automation] Generating ML prediction...")
         handler = DrawHandler()
-        
+        if for_draw_time is None:
+            current_time = datetime.now(pytz.UTC)
+            minutes = (current_time.minute // 5 + 1) * 5
+            for_draw_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(minutes=minutes)
         # Ensure models are trained
         if not handler._get_latest_model():
             print("[Automation] No models found. Training models...")
@@ -106,12 +132,13 @@ def generate_prediction():
             print("[Automation] Failed to generate predictions.")
             return False, "No predictions generated"
             
-        # Save predictions
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Save predictions with draw time if provided
+        timestamp = for_draw_time.strftime('%Y-%m-%d %H:%M:%S') if for_draw_time else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         handler.save_predictions_to_csv(predictions, probabilities, timestamp)
         
         # Display basic info
         print(f"[Automation] Generated prediction: {sorted(predictions)}")
+        print(f"[Automation] For draw at: {timestamp}")
         
         return True, (predictions, probabilities, analysis)
         
@@ -121,9 +148,13 @@ def generate_prediction():
         return False, error_msg
 
 
-def evaluate_prediction():
+def evaluate_prediction(draw_time=None):
     """
     Programmatic version of menu option 10 - Evaluate prediction.
+    Added draw_time parameter to ensure we're evaluating the correct prediction.
+    
+    Args:
+        draw_time: Optional datetime of the draw being evaluated
     
     Returns:
         tuple: (success, result)
@@ -132,6 +163,9 @@ def evaluate_prediction():
     """
     try:
         print("\n[Automation] Evaluating prediction...")
+        if draw_time:
+            print(f"[Automation] Evaluating draw from: {draw_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
         evaluator = PredictionEvaluator()
         evaluator.evaluate_past_predictions()
         
