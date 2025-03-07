@@ -1,31 +1,30 @@
-# File: automation/automation_runner.py
 import os
 import sys
-import argparse
-import time
 import signal
-import logging
-from datetime import datetime
 import traceback
+from datetime import datetime
 import pytz
+import argparse
 
-# Add src directory directly to Python path
+# Add the project root to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
-src_dir = os.path.join(project_root, 'src')
-sys.path.insert(0, src_dir)  # Add src directory directly
-sys.path.insert(0, project_root)  # Also add project root
 
-# Now import core components from src
-from config.paths import PATHS, ensure_directories
-from draw_handler import DrawHandler, perform_complete_analysis, train_and_predict
-from data_collector_selenium import KinoDataCollector
-from prediction_evaluator import PredictionEvaluator
+# Add both project root and src directories to Python path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-# Import automation components using relative imports
-from .cycle_manager import PredictionCycleManager
-from .scheduler import DrawScheduler, get_formatted_time_remaining
-from .operations import test_operation  # Using relative import for operations
+# Now try the imports
+try:
+    from cycle_manager import PredictionCycleManager  # Changed from automation.cycle_manager
+    from src.data_collector_selenium import KinoDataCollector
+    from operations import test_operation  # Changed from automation.operations
+except ImportError as e:
+    print(f"Import error: {e}")
+    print(f"Current directory: {os.getcwd()}")
+    print(f"Python path: {sys.path}")
+    print(f"Project root: {project_root}")
+    sys.exit(1)
 def setup_parser():
     """Set up command line argument parser."""
     parser = argparse.ArgumentParser(
@@ -116,7 +115,8 @@ def run_automation(args):
         print("Checking configuration and imports...")
         
         try:
-            from .operations import test_operation
+            # Change from relative to absolute import
+            from automation.operations import test_operation
             test_operation()
             
             manager = PredictionCycleManager()
@@ -143,11 +143,15 @@ def run_automation(args):
         signal.signal(signal.SIGINT, graceful_shutdown)
         signal.signal(signal.SIGTERM, graceful_shutdown)
         
-        # Configure and start the cycle manager
+        # Initialize the cycle manager with all required parameters
         manager = PredictionCycleManager()
+        
+        # Configure the manager
         manager.max_failures = args.max_failures
         manager.retry_delay = args.retry_delay
         manager.scheduler.post_draw_wait_seconds = args.post_draw_wait
+        manager.fetch_retries = args.fetch_retries  # Make sure this matches your argument parser
+        
         # Add UTC time handling
         current_utc = datetime.now(pytz.UTC)
         print(f"\nStarting automation with configuration (UTC time: {current_utc.strftime('%Y-%m-%d %H:%M:%S')}):")
@@ -155,16 +159,23 @@ def run_automation(args):
         print(f"- Retry delay: {manager.retry_delay} seconds")
         print(f"- Post-draw wait: {manager.scheduler.post_draw_wait_seconds} seconds")
         print(f"- Draw interval: {manager.scheduler.draw_interval_minutes} minutes")
-        print(f"Starting automation with configuration:")
+        
+        # Print configuration one time only
+        print("Starting automation with configuration:")
         print(f"- Maximum consecutive failures: {manager.max_failures}")
         print(f"- Retry delay: {manager.retry_delay} seconds")
         print(f"- Post-draw wait: {manager.scheduler.post_draw_wait_seconds} seconds")
         print(f"- Draw interval: {manager.scheduler.draw_interval_minutes} minutes")
-        print(f"- Fetch retries: {args.fetch_retries}")
+        print(f"- Fetch retries: {manager.fetch_retries}")
         
         # Start the automation cycle
         print("\nStarting automation cycle...\n")
-        manager.run_cycle()
+        
+        # This is the key change - make sure we're calling the instance method
+        if hasattr(manager, 'run_cycle'):
+            manager.run_cycle()
+        else:
+            raise AttributeError("PredictionCycleManager instance has no run_cycle method")
         
     except KeyboardInterrupt:
         print("\nAutomation stopped by user.")
