@@ -3,7 +3,6 @@ import os
 import sys
 import time
 from datetime import datetime, timedelta
-
 import pytz
 
 # Add src directory directly to Python path
@@ -15,39 +14,27 @@ sys.path.insert(0, project_root)  # Also add project root
 
 # Now the imports should work correctly
 from config.paths import PATHS, ensure_directories
-from draw_handler import DrawHandler, save_draw_to_csv, perform_complete_analysis, train_and_predict
-from data_collector_selenium import KinoDataCollector
-from prediction_evaluator import PredictionEvaluator
+from src.draw_handler import DrawHandler, save_draw_to_csv, perform_complete_analysis, train_and_predict
+from src.data_collector_selenium import KinoDataCollector
+from src.prediction_evaluator import PredictionEvaluator
 from automation.scheduler import DrawScheduler
+
+# In automation/operations.py
 
 def fetch_latest_draws(max_retries=3, retry_delay=10):
     """
-    Programmatic version of menu option 3 - Fetch latest draws from website.
-    Added retry mechanism to ensure site is updated.
-    
-    Returns:
-        tuple: (success, result)
-            - success (bool): True if operation succeeded, False otherwise
-            - result: If success, a list of draws; if failure, an error message
+    Mirror the working data_collector_selenium.py functionality
     """
     try:
         print("\n[Automation] Fetching latest draws from website...")
         collector = KinoDataCollector()
         
-        # Initialize variables for retry logic
-        draws = None
-        attempts = 0
+        # First sort existing historical draws
+        print("[Automation] Sorting historical draws...")
+        collector.sort_historical_draws()
         
-        while attempts < max_retries:
-            draws = collector.fetch_latest_draws()
-            
-            if draws and len(draws) > 0:
-                break
-                
-            attempts += 1
-            if attempts < max_retries:
-                print(f"[Automation] Retry {attempts}/{max_retries} in {retry_delay} seconds...")
-                time.sleep(retry_delay)
+        # Then fetch new draws with the proven working method
+        draws = collector.fetch_latest_draws(num_draws=1)  # Get latest draw
         
         if not draws:
             print("[Automation] No draws fetched after all attempts.")
@@ -55,30 +42,32 @@ def fetch_latest_draws(max_retries=3, retry_delay=10):
             
         print(f"[Automation] Fetched {len(draws)} draws from website.")
         
-        # Save draws to CSV
-        for draw_date, numbers in draws:
-            save_draw_to_csv(draw_date, numbers)
+        # Sort again after collecting new draws
+        print("[Automation] Sorting updated historical draws...")
+        if collector.sort_historical_draws():
+            print("[Automation] Historical draws successfully sorted from newest to oldest")
+        else:
+            print("[Automation] Error occurred while sorting draws")
             
-        print("[Automation] Draws saved to CSV.")
+        print("\nCollection Status:", collector.collection_status)
         return True, draws
-        
+
     except Exception as e:
         error_msg = f"Error fetching latest draws: {str(e)}"
         print(f"[Automation] {error_msg}")
         return False, error_msg
 
-
 def perform_analysis(draws=None):
     """
-    Programmatic version of menu option 8 - Perform complete analysis.
+    Perform complete analysis on draws.
     
     Args:
-        draws: Optional list of draws to analyze. If None, will use draws from CSV.
+        draws: Optional list of draws to analyze. If None, uses draws from CSV.
         
     Returns:
         tuple: (success, result)
-            - success (bool): True if operation succeeded, False otherwise
-            - result: If success, None; if failure, an error message
+            - success (bool): True if operation succeeded
+            - result: None if successful, error message if failed
     """
     try:
         print("\n[Automation] Performing complete analysis...")
@@ -97,28 +86,31 @@ def perform_analysis(draws=None):
         print(f"[Automation] {error_msg}")
         return False, error_msg
 
-
 def generate_prediction(for_draw_time=None):
     """
-    Programmatic version of menu option 9 - Generate ML prediction.
-    Added draw_time parameter to track prediction target.
+    Generate prediction for next draw.
     
     Args:
-        for_draw_time: Optional datetime of the draw we're predicting for
+        for_draw_time: Optional datetime for target draw
     
     Returns:
         tuple: (success, result)
-            - success (bool): True if operation succeeded, False otherwise
-            - result: If success, a tuple of (predictions, probabilities, analysis);
-                     if failure, an error message
+            - success (bool): True if operation succeeded
+            - result: (predictions, probabilities, analysis) if successful,
+                     error message if failed
     """
     try:
         print("\n[Automation] Generating ML prediction...")
+        from src.draw_handler import DrawHandler
         handler = DrawHandler()
+        predictions, probabilities, analysis = handler.handle_prediction_pipeline()
+
+        # Set target draw time
         if for_draw_time is None:
             current_time = datetime.now(pytz.UTC)
-            minutes = (current_time.minute // 5 + 1) * 5
-            for_draw_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(minutes=minutes)
+            scheduler = DrawScheduler()
+            for_draw_time = scheduler.get_next_draw_time(current_time)
+
         # Ensure models are trained
         if not handler._get_latest_model():
             print("[Automation] No models found. Training models...")
@@ -132,13 +124,13 @@ def generate_prediction(for_draw_time=None):
             print("[Automation] Failed to generate predictions.")
             return False, "No predictions generated"
             
-        # Save predictions with draw time if provided
-        timestamp = for_draw_time.strftime('%Y-%m-%d %H:%M:%S') if for_draw_time else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Save predictions with UTC timestamp
+        timestamp = for_draw_time.strftime('%Y-%m-%d %H:%M:%S')
         handler.save_predictions_to_csv(predictions, probabilities, timestamp)
         
         # Display basic info
         print(f"[Automation] Generated prediction: {sorted(predictions)}")
-        print(f"[Automation] For draw at: {timestamp}")
+        print(f"[Automation] For draw at: {timestamp} UTC")
         
         return True, (predictions, probabilities, analysis)
         
@@ -147,24 +139,22 @@ def generate_prediction(for_draw_time=None):
         print(f"[Automation] {error_msg}")
         return False, error_msg
 
-
 def evaluate_prediction(draw_time=None):
     """
-    Programmatic version of menu option 10 - Evaluate prediction.
-    Added draw_time parameter to ensure we're evaluating the correct prediction.
+    Evaluate prediction accuracy.
     
     Args:
-        draw_time: Optional datetime of the draw being evaluated
+        draw_time: Optional datetime of draw to evaluate
     
     Returns:
         tuple: (success, result)
-            - success (bool): True if operation succeeded, False otherwise
-            - result: If success, evaluation results; if failure, an error message
+            - success (bool): True if operation succeeded
+            - result: Evaluation stats if successful, error message if failed
     """
     try:
         print("\n[Automation] Evaluating prediction...")
         if draw_time:
-            print(f"[Automation] Evaluating draw from: {draw_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"[Automation] Evaluating draw from: {draw_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
             
         evaluator = PredictionEvaluator()
         evaluator.evaluate_past_predictions()
@@ -184,14 +174,8 @@ def evaluate_prediction(draw_time=None):
         print(f"[Automation] {error_msg}")
         return False, error_msg
 
-
 def test_operation():
-    """
-    Simple function to test importing and using the operations module.
-    
-    Returns:
-        bool: True if the test passes, False otherwise
-    """
+    """Test importing and basic functionality."""
     try:
         print("Operations module imported successfully!")
         ensure_directories()
@@ -201,12 +185,11 @@ def test_operation():
         print(f"Error testing operations: {str(e)}")
         return False
 
-
 if __name__ == "__main__":
-    # Simple test code for the operations
+    # Test the operations module
     test_operation()
     
-    # Uncomment to test specific operations
+    # Optional: Test individual operations
     # success, result = fetch_latest_draws()
     # print(f"Fetch success: {success}")
     

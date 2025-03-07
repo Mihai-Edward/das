@@ -3,7 +3,6 @@ import os
 import sys
 from datetime import datetime, timedelta
 import math
-
 import pytz
 
 class DrawScheduler:
@@ -19,6 +18,7 @@ class DrawScheduler:
         """
         self.draw_interval_minutes = draw_interval_minutes
         self.post_draw_wait_seconds = post_draw_wait_seconds
+        self.timezone = pytz.UTC
         # Track the last evaluated draw time
         self.last_evaluated_draw = None
     
@@ -33,8 +33,8 @@ class DrawScheduler:
             datetime: Time of the next draw
         """
         if reference_time is None:
-            reference_time = datetime.now()
-            reference_time = datetime.now(pytz.UTC)
+            reference_time = datetime.now(self.timezone)
+            
         # Calculate minutes past the hour
         minutes_past = reference_time.minute % self.draw_interval_minutes
         
@@ -78,7 +78,7 @@ class DrawScheduler:
             bool: True if should start new cycle, False otherwise
         """
         if current_time is None:
-            current_time = datetime.now()
+            current_time = datetime.now(self.timezone)
             
         if self.last_evaluated_draw is None:
             return True
@@ -90,22 +90,41 @@ class DrawScheduler:
         evaluation_time = self.get_evaluation_time(next_after_last)
         return current_time >= evaluation_time
     
-    def seconds_until_time(self, target_time):
+    def get_time_until_next_draw(self, current_time=None):
         """
-        Calculate the number of seconds until a target time.
+        Calculate time remaining until next draw.
         
         Args:
-            target_time: The target datetime
+            current_time: Optional current time reference
             
         Returns:
-            int: Number of seconds until target time (0 if in the past)
+            timedelta: Time remaining until next draw
         """
-        now = datetime.now()
-        if target_time <= now:
-            return 0
+        if current_time is None:
+            current_time = datetime.now(self.timezone)
+        
+        next_draw = self.get_next_draw_time(current_time)
+        return next_draw - current_time
+    
+    def get_formatted_time_remaining(self, current_time=None):
+        """
+        Get a human-readable string of time remaining until next draw.
+        
+        Args:
+            current_time: Optional current time reference
             
-        delta = target_time - now
-        return max(0, delta.total_seconds())  # Ensure non-negative
+        Returns:
+            str: Formatted time string (e.g., "2m 45s")
+        """
+        if current_time is None:
+            current_time = datetime.now(self.timezone)
+            
+        delta = self.get_time_until_next_draw(current_time)
+        
+        minutes = int(delta.total_seconds() // 60)
+        seconds = int(delta.total_seconds() % 60)
+        
+        return f"{minutes}m {seconds}s"
     
     def update_last_evaluated(self, draw_time):
         """
@@ -116,67 +135,29 @@ class DrawScheduler:
         """
         self.last_evaluated_draw = draw_time
 
-
 def get_next_draw_time(reference_time=None):
     """Convenience function to get the next draw time."""
     scheduler = DrawScheduler()
     return scheduler.get_next_draw_time(reference_time)
 
-
 def get_seconds_until(target_time):
     """Convenience function to get seconds until a target time."""
-    now = datetime.now()
+    now = datetime.now(pytz.UTC)
     if target_time <= now:
         return 0
         
     delta = target_time - now
     return max(0, delta.total_seconds())  # Ensure non-negative
 
-
-def get_formatted_time_remaining(target_time):
-    """
-    Format the time remaining until target time in a human-readable way.
-    
-    Args:
-        target_time: The target datetime
-        
-    Returns:
-        str: Formatted time remaining (e.g., "2h 30m 15s")
-    """
-    seconds = get_seconds_until(target_time)
-    
-    # If time is in the past
-    if seconds <= 0:
-        return "0s"
-        
-    # Calculate hours, minutes, seconds
-    hours = math.floor(seconds / 3600)
-    seconds %= 3600
-    minutes = math.floor(seconds / 60)
-    seconds = math.floor(seconds % 60)
-    
-    # Format the string
-    parts = []
-    if hours > 0:
-        parts.append(f"{hours}h")
-    if minutes > 0:
-        parts.append(f"{minutes}m")
-    if seconds > 0 or not parts:
-        parts.append(f"{seconds}s")
-        
-    return " ".join(parts)
-
-
 if __name__ == "__main__":
-    # Simple test of the scheduler
+    # Test the scheduler
     scheduler = DrawScheduler()
-    now = datetime.now()
+    now = datetime.now(pytz.UTC)
     
     next_draw = scheduler.get_next_draw_time()
     evaluation_time = scheduler.get_evaluation_time(next_draw)
     
-    print(f"Current time: {now.strftime('%H:%M:%S')}")
-    print(f"Next draw at: {next_draw.strftime('%H:%M:%S')}")
-    print(f"Evaluate at: {evaluation_time.strftime('%H:%M:%S')}")
-    print(f"Time until next draw: {get_formatted_time_remaining(next_draw)}")
-    print(f"Time until evaluation: {get_formatted_time_remaining(evaluation_time)}")
+    print(f"Current time (UTC): {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Next draw at: {next_draw.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Evaluate at: {evaluation_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Time until next draw: {scheduler.get_formatted_time_remaining()}")
