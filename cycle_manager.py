@@ -23,10 +23,11 @@ TIMEZONE = pytz.timezone('Europe/Bucharest')  # UTC+2
 # Define states as enum for clarity and type safety
 class PredictionState(Enum):
     FETCHING = "fetching"
-    ANALYZING = "analyzing" 
+    ANALYZING = "analyzing"
     PREDICTING = "predicting"
     LEARNING = "learning"
     WAITING = "waiting"
+    PREPARING_TO_EVALUATE = "preparing_to_evaluate"
     EVALUATING = "evaluating"
 
 class PredictionCycleManager:
@@ -51,6 +52,9 @@ class PredictionCycleManager:
         # Initialize prediction data
         self.current_prediction = None
         self.current_probabilities = None
+        
+        # Collected draws for analysis
+        self.collected_draws = None
         
         # Log initialization
         self._log_status("Prediction cycle manager initialized")
@@ -93,12 +97,14 @@ class PredictionCycleManager:
         """Collect data for prediction."""
         from automation.operations import collect_data_operation
         success, message = collect_data_operation(num_draws=self.fetch_retries * 3)
+        if success:
+            self.collected_draws = message["draws"]  # Store collected draws for analysis
         return success, message
         
     def analyze_data(self):
         """Analyze collected data."""
         from automation.operations import analyze_data_operation
-        success, message = analyze_data_operation()
+        success, message = analyze_data_operation(self.collected_draws)  # Pass collected draws to the function
         return success, message
         
     def generate_prediction(self, for_draw_time=None):
@@ -159,6 +165,8 @@ class PredictionCycleManager:
                     self._handle_learning_state()
                 elif self.state == PredictionState.WAITING:
                     self._handle_waiting_state()
+                elif self.state == PredictionState.PREPARING_TO_EVALUATE:
+                    self._handle_preparing_to_evaluate_state()
                 elif self.state == PredictionState.EVALUATING:
                     self._handle_evaluating_state()
                 
@@ -238,10 +246,10 @@ class PredictionCycleManager:
         # Calculate time until evaluation
         time_to_evaluate = (evaluation_time - now).total_seconds()
         
-        # Only use timing logic in the waiting state
-        if now >= evaluation_time - timedelta(seconds=2):
-            # Time to evaluate has arrived
-            self.state = PredictionState.EVALUATING
+        # Transition to PREPARING_TO_EVALUATE if less than 10 seconds to draw
+        if time_to_evaluate <= 10:
+            self._log_status("Preparing to evaluate draw")
+            self.state = PredictionState.PREPARING_TO_EVALUATE
             return
             
         # Otherwise, display waiting status
@@ -253,6 +261,12 @@ class PredictionCycleManager:
         
         # Sleep longer during waiting to reduce log spam
         time.sleep(10)
+    
+    def _handle_preparing_to_evaluate_state(self):
+        """Handle the preparing to evaluate state operations and transitions."""
+        self._log_status("Preparing for evaluation")
+        time.sleep(10)  # Wait for 10 seconds to ensure the draw has occurred
+        self.state = PredictionState.EVALUATING
     
     def _handle_evaluating_state(self):
         """Handle the evaluating state operations and transitions."""

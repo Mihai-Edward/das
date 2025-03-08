@@ -123,7 +123,7 @@ def setup_parser():
     
     parser.add_argument(
         '--initial-state',
-        choices=['fetching', 'analyzing', 'predicting', 'learning', 'waiting', 'evaluating'],
+        choices=['fetching', 'analyzing', 'data_analysis', 'predicting', 'learning', 'waiting', 'evaluating'],
         default='fetching',
         help='Set the initial state of the prediction cycle (for testing purposes)'
     )

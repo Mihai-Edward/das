@@ -1,10 +1,10 @@
-# automation/operations.py
 
 import os
 import sys
 import time
 from datetime import datetime, timedelta
 import pytz
+from enum import Enum
 
 # Add project root to path if necessary
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,296 +13,272 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import necessary modules
+from automation.scheduler import DrawScheduler
 from config.paths import PATHS, ensure_directories
 
-# Define the standard timezone to use across all operations
+# Define the standard timezone to use
 TIMEZONE = pytz.timezone('Europe/Bucharest')  # UTC+2
 
-def test_operation():
-    """Test operation to verify imports and configuration."""
-    print("\nTesting operations module...")
-    
-    # Verify paths configuration
-    ensure_directories()
-    
-    # Test importing critical modules
-    try:
-        from src.draw_handler import DrawHandler
-        from src.lottery_predictor import LotteryPredictor
-        from src.data_collector_selenium import KinoDataCollector
-        print("✓ All required modules imported successfully")
-    except ImportError as e:
-        print(f"✗ Import error: {e}")
-        raise
-        
-    return True
+# Define states as enum for clarity and type safety
+class PredictionState(Enum):
+    FETCHING = "fetching"
+    ANALYZING = "analyzing"
+    PREDICTING = "predicting"
+    LEARNING = "learning"
+    WAITING = "waiting"
+    PREPARING_TO_EVALUATE = "preparing_to_evaluate"
+    EVALUATING = "evaluating"
 
-def collect_data_operation(num_draws=10):
-    """
-    Collect data from website using selenium.
-    
-    This operation corresponds to the FETCHING state in the state machine.
-    
-    Args:
-        num_draws: Number of draws to fetch
+class PredictionCycleManager:
+    def __init__(self):
+        """Initialize the cycle manager with default settings."""
+        # Status tracking
+        self.active = True
+        self.state = PredictionState.FETCHING  # Start with fetching state
+        self.last_success = None
+        self.last_error = None
+        self.consecutive_failures = 0
         
-    Returns:
-        tuple: (success, message_or_data)
-    """
-    try:
-        print("\n[Automation] Fetching latest draws from website...")
+        # Configuration
+        self.max_failures = 5
+        self.retry_delay = 30  # seconds
+        self.fetch_retries = 3
+        self.continuous_learning_enabled = False  # Default to disabled
         
-        # Import collector after path setup
-        from src.data_collector_selenium import KinoDataCollector
+        # Initialize scheduler
+        self.scheduler = DrawScheduler()
         
-        # Initialize collector
-        collector = KinoDataCollector()
+        # Initialize prediction data
+        self.current_prediction = None
+        self.current_probabilities = None
         
-        # First sort existing data
-        print("[Automation] Sorting historical draws...")
-        collector.sort_historical_draws()
+        # Collected draws for analysis
+        self.collected_draws = None
         
-        # Get latest draws
-        start_time = datetime.now(TIMEZONE)
-        draws = collector.fetch_latest_draws(num_draws=num_draws)
-        fetch_duration = (datetime.now(TIMEZONE) - start_time).total_seconds()
+        # Log initialization
+        self._log_status("Prediction cycle manager initialized")
         
-        if not draws:
-            return False, "Failed to fetch draws"
-            
-        # Sort again after adding new data
-        print("[Automation] Sorting updated historical draws...")
-        if collector.sort_historical_draws():
-            print("[Automation] Historical draws successfully sorted from newest to oldest")
-        else:
-            print("[Automation] Warning: Failed to sort draws, but continuing")
-            
-        print(f"[Automation] Fetched {len(draws)} draws from website in {fetch_duration:.2f} seconds.")
-        return True, {
-            "draws": draws,
-            "count": len(draws),
-            "duration": fetch_duration
+    def get_status(self):
+        """Get the current status of the cycle manager."""
+        return {
+            'active': self.active,
+            'state': self.state.value,
+            'last_success': self.last_success,
+            'last_error': self.last_error,
+            'consecutive_failures': self.consecutive_failures,
+            'next_draw': self.scheduler.get_next_draw_time(),
+            'next_eval': self.scheduler.get_evaluation_time(self.scheduler.get_next_draw_time())
         }
         
-    except Exception as e:
-        error_msg = f"Error collecting data: {str(e)}"
-        print(f"[Automation] {error_msg}")
-        return False, error_msg
-
-def analyze_data_operation():
-    """
-    Perform analysis on collected data.
-    
-    This operation corresponds to the ANALYZING state in the state machine.
-    
-    Returns:
-        tuple: (success, message_or_data)
-    """
-    try:
-        print("\n[Automation] Performing complete analysis...")
-        start_time = datetime.now(TIMEZONE)
+    def _log_status(self, message):
+        """Log a status message with timestamp and current state."""
+        # Use UTC+2 timezone for logs
+        timestamp = datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
+        state_info = f"[{self.state.value}]" if hasattr(self, 'state') else ""
+        print(f"[{timestamp}] {state_info} {message}")
         
-        # Import handler after path setup
-        from src.draw_handler import DrawHandler
-        from src.data_collector_selenium import KinoDataCollector
+    def _handle_failure(self, stage, message):
+        """Handle a failure during operation."""
+        self.consecutive_failures += 1
+        self.last_error = {'stage': stage, 'message': message, 'time': datetime.now(TIMEZONE)}
+        self._log_status(f"Failure in {stage}: {message}")
+        self._log_status(f"Consecutive failures: {self.consecutive_failures}/{self.max_failures}")
         
-        # Get draws from collector
-        collector = KinoDataCollector()
-        draws = collector.fetch_latest_draws(num_draws=1)
+        # Exit if max failures reached
+        if self.consecutive_failures >= self.max_failures:
+            self._log_status("Maximum consecutive failures reached, stopping cycle")
+            self.active = False
         
-        if not draws:
-            return False, "No draws available for analysis"
+        # Add delay before retrying
+        time.sleep(self.retry_delay)
+        
+    def collect_data(self):
+        """Collect data for prediction."""
+        from automation.operations import collect_data_operation
+        success, message = collect_data_operation(num_draws=self.fetch_retries * 3)
+        if success:
+            self.collected_draws = message["draws"]  # Store collected draws for analysis
+        return success, message
+        
+    def analyze_data(self):
+        """Analyze collected data."""
+        from automation.operations import analyze_data_operation
+        success, message = analyze_data_operation(self.collected_draws)  # Pass collected draws to the function
+        return success, message
+        
+    def generate_prediction(self, for_draw_time=None):
+        """Generate prediction for next draw."""
+        from automation.operations import generate_prediction_operation
+        success, result = generate_prediction_operation(for_draw_time=for_draw_time)
+        
+        # Store prediction and probabilities if successful
+        if success and isinstance(result, dict):
+            self.current_prediction = result.get("predictions")
+            self.current_probabilities = result.get("probabilities")
             
-        # Use handler to perform analysis
-        handler = DrawHandler()
-        from src.draw_handler import perform_complete_analysis
+        return success, result
         
-        analysis_success = perform_complete_analysis(draws)
-        analysis_duration = (datetime.now(TIMEZONE) - start_time).total_seconds()
+    def evaluate_prediction(self):
+        """Evaluate past predictions."""
+        from automation.operations import evaluate_prediction_operation
+        success, message = evaluate_prediction_operation()
         
-        if analysis_success:
-            print(f"[Automation] Analysis completed successfully in {analysis_duration:.2f} seconds.")
-            return True, {
-                "duration": analysis_duration,
-                "draws_analyzed": len(draws)
-            }
-        else:
-            return False, "Failed to complete analysis"
-        
-    except Exception as e:
-        error_msg = f"Error in analysis: {str(e)}"
-        print(f"[Automation] {error_msg}")
-        return False, error_msg
-
-def generate_prediction_operation(for_draw_time=None):
-    """
-    Generate ML prediction for next draw.
-    
-    This operation corresponds to the PREDICTING state in the state machine.
-    
-    Args:
-        for_draw_time: The draw time to predict for
-        
-    Returns:
-        tuple: (success, message_or_prediction_data)
-    """
-    try:
-        if for_draw_time:
-            print(f"\n[Automation] Generating ML prediction for draw at {for_draw_time.strftime('%H:%M:%S')}")
-        else:
-            print("\n[Automation] Generating ML prediction for next draw...")
-        
-        start_time = datetime.now(TIMEZONE)
-        
-        # Import handler after path setup
-        from src.draw_handler import DrawHandler
-        
-        # Initialize handler
-        handler = DrawHandler()
-        
-        # Use handler to generate prediction
-        predictions, probabilities, analysis = handler.handle_prediction_pipeline()
-        prediction_duration = (datetime.now(TIMEZONE) - start_time).total_seconds()
-        
-        if predictions is not None:
-            print(f"[Automation] Generated prediction: {sorted(predictions)} in {prediction_duration:.2f} seconds")
+        # Track status
+        if success:
+            self.last_success = datetime.now(TIMEZONE)
+            self.consecutive_failures = 0
             
-            # Format draw time for logging
-            if for_draw_time:
-                # Format time in UTC+2
-                time_str = for_draw_time.astimezone(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
-                print(f"[Automation] For draw at: {time_str} (UTC+2)")
+        return success, message
+        
+    def run_continuous_learning(self):
+        """Run the continuous learning cycle after evaluation."""
+        from automation.operations import run_continuous_learning
+        success, message = run_continuous_learning()
+        
+        # Track status
+        if success:
+            self.last_success = datetime.now(TIMEZONE)
+            
+        # Don't increment failure counter for learning failures
+        # as this is not a critical operation
+        return success, message
+        
+    def run_cycle(self):
+        """Run the main prediction cycle using state machine approach."""
+        self._log_status("Starting prediction cycle with state machine approach")
+        
+        # Main cycle loop
+        while self.active and self.consecutive_failures < self.max_failures:
+            try:
+                # Log current state
+                self._log_status(f"Current state: {self.state.value}")
                 
-            return True, {
-                "predictions": predictions, 
-                "probabilities": probabilities, 
-                "analysis": analysis,
-                "duration": prediction_duration,
-                "target_draw_time": for_draw_time
-            }
-        else:
-            return False, "Failed to generate prediction"
-        
-    except Exception as e:
-        error_msg = f"Error generating prediction: {str(e)}"
-        print(f"[Automation] {error_msg}")
-        return False, error_msg
+                # Handle current state
+                if self.state == PredictionState.FETCHING:
+                    self._handle_fetching_state()
+                elif self.state == PredictionState.ANALYZING:
+                    self._handle_analyzing_state()
+                elif self.state == PredictionState.PREDICTING:
+                    self._handle_predicting_state()
+                elif self.state == PredictionState.LEARNING:
+                    self._handle_learning_state()
+                elif self.state == PredictionState.WAITING:
+                    self._handle_waiting_state()
+                elif self.state == PredictionState.PREPARING_TO_EVALUATE:
+                    self._handle_preparing_to_evaluate_state()
+                elif self.state == PredictionState.EVALUATING:
+                    self._handle_evaluating_state()
+                
+                # Brief pause between state checks
+                time.sleep(3)
+                
+            except Exception as e:
+                self._handle_failure("cycle", str(e))
+                time.sleep(self.retry_delay)
 
-def evaluate_prediction_operation():
-    """
-    Evaluate past predictions against actual draws.
-    
-    This operation corresponds to the EVALUATING state in the state machine.
-    
-    Returns:
-        tuple: (success, message_or_stats)
-    """
-    try:
-        print("\n[Automation] Evaluating past predictions...")
-        start_time = datetime.now(TIMEZONE)
-        
-        # Import evaluator after path setup
-        from src.prediction_evaluator import PredictionEvaluator
-        
-        # Create evaluator and run evaluation
-        evaluator = PredictionEvaluator()
-        evaluator.evaluate_past_predictions()
-        
-        # Get performance stats
-        stats = evaluator.get_performance_stats()
-        evaluation_duration = (datetime.now(TIMEZONE) - start_time).total_seconds()
-        
-        if stats:
-            print(f"\n[Automation] Evaluation completed in {evaluation_duration:.2f} seconds")
-            print("\n[Automation] Evaluation Summary:")
-            print(f"- Total predictions evaluated: {stats.get('total_predictions', 0)}")
-            print(f"- Average correct numbers: {stats.get('average_correct', 0):.1f}")
-            print(f"- Best prediction: {stats.get('best_prediction', 0)} correct numbers")
-            print(f"- Average accuracy: {stats.get('average_accuracy', 0):.1f}%")
-            if 'recent_trend' in stats:
-                trend = stats['recent_trend']
-                print(f"- Recent trend: {'Improving' if trend > 0 else 'Declining'} ({trend:.3f})")
-            
-            # Add duration to stats
-            stats['duration'] = evaluation_duration
-            
-            return True, stats
-        else:
-            return False, "No evaluation statistics available"
-        
-    except Exception as e:
-        error_msg = f"Error in evaluation: {str(e)}"
-        print(f"[Automation] {error_msg}")
-        return False, error_msg
-
-def run_continuous_learning():
-    """
-    Run the continuous learning cycle to improve predictions.
-    
-    This operation corresponds to the LEARNING state in the state machine.
-    
-    Returns:
-        tuple: (success, message_or_metrics)
-    """
-    try:
-        print("\n[Automation] Running continuous learning cycle...")
-        start_time = datetime.now(TIMEZONE)
-        
-        # Import handler after path setup
-        from src.draw_handler import DrawHandler
-        
-        # Initialize handler
-        handler = DrawHandler()
-        
-        # Run continuous learning cycle
-        success = handler.run_continuous_learning_cycle()
-        learning_duration = (datetime.now(TIMEZONE) - start_time).total_seconds()
+    def _handle_fetching_state(self):
+        """Handle the fetching state operations and transitions."""
+        self._log_status("Collecting data...")
+        success, message = self.collect_data()
         
         if success:
-            # Get metrics to display
-            metrics = handler.get_learning_metrics()
-            metrics['duration'] = learning_duration
-            
-            print(f"\n[Automation] Continuous Learning completed in {learning_duration:.2f} seconds")
-            print("\n[Automation] Continuous Learning Results:")
-            print(f"- Learning cycles completed: {metrics.get('cycles_completed', 0)}")
-            
-            if metrics.get('current_accuracy') is not None:
-                print(f"- Current prediction accuracy: {metrics['current_accuracy']:.2f}%")
-                
-            if metrics.get('improvement_rate') is not None:
-                print(f"- Total improvement: {metrics['improvement_rate']:.2f}%")
-                
-            print("\n[Automation] Most recent adjustments:")
-            if metrics.get('last_adjustments') and len(metrics['last_adjustments']) > 0:
-                for adj in metrics['last_adjustments']:
-                    print(f"- {adj}")
-            else:
-                print("- No adjustments made")
-                
-            return True, metrics
+            # On success, transition to ANALYZING state
+            self.state = PredictionState.ANALYZING
         else:
-            return False, {
-                "error": "Continuous learning cycle failed or made no improvements",
-                "duration": learning_duration
-            }
+            # On failure, retry in current state
+            self._handle_failure("data_collection", message)
+    
+    def _handle_analyzing_state(self):
+        """Handle the analyzing state operations and transitions."""
+        self._log_status("Analyzing data...")
+        success, message = self.analyze_data()
         
-    except Exception as e:
-        error_msg = f"Error in continuous learning: {str(e)}"
-        print(f"[Automation] {error_msg}")
-        return False, error_msg
-
-if __name__ == "__main__":
-    # For testing the operations module
-    print("Testing operations module...")
-    test_operation()
-    print("Running data collection...")
-    collect_data_operation(num_draws=2)
-    print("Running analysis...")
-    analyze_data_operation()
-    print("Generating prediction...")
-    generate_prediction_operation()
-    print("Evaluating predictions...")
-    evaluate_prediction_operation()
-    print("Running continuous learning...")
-    run_continuous_learning()
+        if success:
+            # On success, transition to PREDICTING state
+            self.state = PredictionState.PREDICTING
+        else:
+            # On failure, retry in current state
+            self._handle_failure("analysis", message)
+    
+    def _handle_predicting_state(self):
+        """Handle the predicting state operations and transitions."""
+        self._log_status("Generating prediction...")
+        next_draw_time = self.scheduler.get_next_draw_time()
+        success, result = self.generate_prediction(for_draw_time=next_draw_time)
+        
+        if success:
+            # On success, transition to LEARNING or WAITING state based on configuration
+            if self.continuous_learning_enabled:
+                self.state = PredictionState.LEARNING
+            else:
+                self.state = PredictionState.WAITING
+                self._log_status(f"Prediction complete. Waiting for next draw at {next_draw_time.strftime('%H:%M:%S')}")
+        else:
+            # On failure, retry in current state
+            self._handle_failure("prediction", str(result))
+    
+    def _handle_learning_state(self):
+        """Handle the continuous learning state operations and transitions."""
+        if self.continuous_learning_enabled:
+            self._log_status("Running continuous learning...")
+            success, message = self.run_continuous_learning()
+            
+            if success:
+                self._log_status("Continuous learning completed successfully")
+            else:
+                self._log_status(f"Note: Continuous learning failed: {message}")
+                # Learning failures don't stop the cycle
+        else:
+            self._log_status("Continuous learning disabled, skipping")
+            
+        # Always transition to WAITING state after learning (success or failure)
+        self.state = PredictionState.WAITING
+        next_draw_time = self.scheduler.get_next_draw_time()
+        self._log_status(f"Waiting for next draw at {next_draw_time.strftime('%H:%M:%S')}")
+    
+    def _handle_waiting_state(self):
+        """Handle the waiting state operations and transitions."""
+        next_draw_time = self.scheduler.get_next_draw_time()
+        evaluation_time = self.scheduler.get_evaluation_time(next_draw_time)
+        now = datetime.now(TIMEZONE)
+        
+        # Calculate time until evaluation
+        time_to_evaluate = (evaluation_time - now).total_seconds()
+        
+        # Transition to PREPARING_TO_EVALUATE if less than 10 seconds to draw
+        if time_to_evaluate <= 10:
+            self._log_status("Preparing to evaluate draw")
+            self.state = PredictionState.PREPARING_TO_EVALUATE
+            return
+            
+        # Otherwise, display waiting status
+        time_to_next_draw = (next_draw_time - now).total_seconds()
+        if time_to_next_draw > 60:  # If more than a minute
+            self._log_status(f"Waiting {int(time_to_next_draw/60)} minutes {int(time_to_next_draw%60)} seconds until next draw")
+        else:
+            self._log_status(f"Waiting {int(time_to_next_draw)} seconds until next draw")
+        
+        # Sleep longer during waiting to reduce log spam
+        time.sleep(11)
+    
+    def _handle_preparing_to_evaluate_state(self):
+        """Handle the preparing to evaluate state operations and transitions."""
+        self._log_status("Preparing for evaluation")
+        time.sleep(11)  # Wait for 10 seconds to ensure the draw has occurred
+        self.state = PredictionState.EVALUATING
+    
+    def _handle_evaluating_state(self):
+        """Handle the evaluating state operations and transitions."""
+        self._log_status("Evaluating predictions...")
+        success, message = self.evaluate_prediction()
+        
+        if success:
+            self._log_status("Evaluation complete")
+            self.last_success = datetime.now(TIMEZONE)
+            self.consecutive_failures = 0
+        else:
+            self._handle_failure("evaluation", str(message))
+            # Evaluation failures don't stop the cycle
+        
+        # Always transition back to FETCHING to start the cycle again
+        self.state = PredictionState.FETCHING
