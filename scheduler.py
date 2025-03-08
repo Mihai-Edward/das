@@ -1,227 +1,178 @@
-# File: automation/scheduler.py
 import os
 import sys
 from datetime import datetime, timedelta
-import math
 import pytz
+import logging
+from typing import Optional, Tuple
 
 class DrawScheduler:
-    """Handles scheduling for draw times and waiting periods."""
-    
-    def __init__(self, draw_interval_minutes=5, post_draw_wait_seconds=50):
-        """
-        Initialize the scheduler with specified parameters.
-        
-        Args:
-            draw_interval_minutes: Time between lottery draws in minutes (default 5)
-            post_draw_wait_seconds: Time to wait after draw before evaluating (default 50)
-        """
+    """
+    Handles all timing-related operations for the lottery prediction system.
+    Ensures precise timing for draw cycles and state transitions.
+    """
+    def __init__(self, 
+                 draw_interval_minutes: int = 5,
+                 post_draw_wait_seconds: int = 50,
+                 timing_tolerance_seconds: int = 5):
+        # Core timing settings
         self.draw_interval_minutes = draw_interval_minutes
         self.post_draw_wait_seconds = post_draw_wait_seconds
-        # Change from UTC to UTC+2
-        self.timezone = pytz.timezone('Europe/Bucharest')  # UTC+2 timezone
-        # Track the last evaluated draw time
-        self.last_evaluated_draw = None
-        # Track the current draw cycle we're working with
-        self.current_draw_time = None
-    
-    def get_next_draw_time(self, reference_time=None):
-        """
-        Calculate the time of the next draw.
+        self.timing_tolerance = timing_tolerance_seconds
         
-        Args:
-            reference_time: Optional time reference (defaults to current time)
-            
-        Returns:
-            datetime: Time of the next draw
-        """
+        # Timezone setting (standardized to Bucharest)
+        self.timezone = pytz.timezone('Europe/Bucharest')
+        
+        # Initialize timing tracking
+        self.last_draw_time = None
+        self.next_draw_time = None
+        self.last_evaluation_time = None
+        
+        # Set up logging
+        self.logger = logging.getLogger('DrawScheduler')
+        self._setup_logging()
+        
+    def _setup_logging(self):
+        """Configure logging for the scheduler"""
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
+
+    def get_current_time(self) -> datetime:
+        """Get current time in Bucharest timezone"""
+        return datetime.now(self.timezone)
+
+    def get_next_draw_time(self, reference_time: Optional[datetime] = None) -> datetime:
+        """Calculate the next draw time based on the reference time"""
         if reference_time is None:
-            reference_time = datetime.now(self.timezone)
+            reference_time = self.get_current_time()
             
-        # Calculate minutes past the hour
+        # Calculate minutes until next draw
         minutes_past = reference_time.minute % self.draw_interval_minutes
+        minutes_until = self.draw_interval_minutes - minutes_past
         
-        # If we're exactly at a draw time, the next one is interval minutes away
-        # Otherwise, we need to calculate the time until the next interval mark
-        if minutes_past == 0 and reference_time.second == 0:
-            # Exactly at a draw time, next one is interval away
-            next_draw = reference_time + timedelta(minutes=self.draw_interval_minutes)
-        else:
-            # Calculate minutes until next draw
-            minutes_until = self.draw_interval_minutes - minutes_past
-            
-            # Create the next draw time
-            next_draw = reference_time + timedelta(minutes=minutes_until)
-            
-            # Reset seconds and microseconds
-            next_draw = next_draw.replace(second=0, microsecond=0)
+        # Calculate next draw time
+        next_draw = reference_time + timedelta(minutes=minutes_until)
+        next_draw = next_draw.replace(second=0, microsecond=0)
         
+        # Update internal tracking
+        self.next_draw_time = next_draw
+        
+        self.logger.debug(f"Next draw time calculated: {next_draw.strftime('%Y-%m-%d %H:%M:%S')}")
         return next_draw
-    
-    def get_evaluation_time(self, draw_time):
-        """
-        Calculate the time to start evaluation after a draw.
-        
-        Args:
-            draw_time: The time of the draw
-            
-        Returns:
-            datetime: Time to begin evaluation
-        """
+
+    def get_evaluation_time(self, draw_time: datetime) -> datetime:
+        """Calculate when to evaluate results for a given draw time"""
         return draw_time + timedelta(seconds=self.post_draw_wait_seconds)
-    
-    def set_current_draw(self, draw_time):
+
+    def is_within_tolerance(self, time1: datetime, time2: datetime, 
+                          custom_tolerance: Optional[int] = None) -> bool:
+        """Check if two times are within the tolerance window"""
+        tolerance = custom_tolerance if custom_tolerance is not None else self.timing_tolerance
+        delta = abs((time1 - time2).total_seconds())
+        return delta <= tolerance
+
+    def get_wait_times(self) -> Tuple[float, float, float]:
         """
-        Set the current draw time we're processing.
-        Used by the state machine to track which draw is being processed.
-        
-        Args:
-            draw_time: The draw time being processed
+        Calculate various wait times from current moment
+        Returns: (seconds_to_next_draw, seconds_to_evaluation, seconds_to_fetch)
         """
-        self.current_draw_time = draw_time
-    
-    def get_current_draw(self):
-        """
-        Get the current draw time being processed.
-        
-        Returns:
-            datetime: Current draw time being processed or next draw time if none set
-        """
-        if self.current_draw_time is None:
-            return self.get_next_draw_time()
-        return self.current_draw_time
-    
-    def should_start_new_cycle(self, current_time=None):
-        """
-        Determine if it's time to start a new prediction cycle.
-        
-        Args:
-            current_time: Optional current time (defaults to now)
-            
-        Returns:
-            bool: True if should start new cycle, False otherwise
-        """
-        if current_time is None:
-            current_time = datetime.now(self.timezone)
-            
-        if self.last_evaluated_draw is None:
-            return True
-            
-        # Get the next draw time after the last evaluated draw
-        next_after_last = self.get_next_draw_time(self.last_evaluated_draw)
-        
-        # If we're within evaluation window of next draw, start new cycle
-        evaluation_time = self.get_evaluation_time(next_after_last)
-        return current_time >= evaluation_time
-    
-    def get_time_until_next_draw(self, current_time=None):
-        """
-        Calculate time remaining until next draw.
-        
-        Args:
-            current_time: Optional current time reference
-            
-        Returns:
-            timedelta: Time remaining until next draw
-        """
-        if current_time is None:
-            current_time = datetime.now(self.timezone)
-        
-        next_draw = self.get_next_draw_time(current_time)
-        return next_draw - current_time
-    
-    def get_time_until_evaluation(self, current_time=None):
-        """
-        Calculate time remaining until next evaluation.
-        
-        Args:
-            current_time: Optional current time reference
-            
-        Returns:
-            timedelta: Time remaining until evaluation
-        """
-        if current_time is None:
-            current_time = datetime.now(self.timezone)
-        
+        current_time = self.get_current_time()
         next_draw = self.get_next_draw_time(current_time)
         eval_time = self.get_evaluation_time(next_draw)
-        return eval_time - current_time
-    
-    def is_evaluation_time(self, current_time=None, tolerance_seconds=2):
-        """
-        Check if it's time to evaluate (with tolerance).
         
-        Args:
-            current_time: Optional current time reference
-            tolerance_seconds: Seconds of tolerance for timing check
-            
-        Returns:
-            bool: True if it's time to evaluate, False otherwise
-        """
-        if current_time is None:
-            current_time = datetime.now(self.timezone)
+        time_to_draw = (next_draw - current_time).total_seconds()
+        time_to_eval = (eval_time - current_time).total_seconds()
         
-        next_draw = self.get_next_draw_time()
-        eval_time = self.get_evaluation_time(next_draw)
+        # Calculate optimal fetch time (typically 50 seconds after last draw)
+        last_draw = next_draw - timedelta(minutes=self.draw_interval_minutes)
+        fetch_time = last_draw + timedelta(seconds=self.post_draw_wait_seconds)
+        time_to_fetch = (fetch_time - current_time).total_seconds()
         
-        # Check if we're within tolerance of evaluation time
-        time_diff = (current_time - eval_time).total_seconds()
-        return abs(time_diff) <= tolerance_seconds
-    
-    def get_formatted_time_remaining(self, current_time=None):
-        """
-        Get a human-readable string of time remaining until next draw.
-        
-        Args:
-            current_time: Optional current time reference
-            
-        Returns:
-            str: Formatted time string (e.g., "2m 45s")
-        """
-        if current_time is None:
-            current_time = datetime.now(self.timezone)
-            
-        delta = self.get_time_until_next_draw(current_time)
-        
-        minutes = int(delta.total_seconds() // 60)
-        seconds = int(delta.total_seconds() % 60)
-        
-        return f"{minutes}m {seconds}s"
-    
-    def update_last_evaluated(self, draw_time):
-        """
-        Update the last evaluated draw time.
-        
-        Args:
-            draw_time: The draw time that was just evaluated
-        """
-        self.last_evaluated_draw = draw_time
+        return time_to_draw, time_to_eval, time_to_fetch
 
-def get_next_draw_time(reference_time=None):
-    """Convenience function to get the next draw time."""
-    scheduler = DrawScheduler()
-    return scheduler.get_next_draw_time(reference_time)
+    def should_transition_state(self, current_state: str, 
+                              target_time: datetime,
+                              tolerance: Optional[int] = None) -> bool:
+        """
+        Determine if it's time to transition from the current state
+        based on target time and tolerance
+        """
+        current_time = self.get_current_time()
+        return self.is_within_tolerance(current_time, target_time, tolerance)
 
-def get_seconds_until(target_time):
-    """Convenience function to get seconds until a target time."""
-    # Use Europe/Bucharest timezone (UTC+2)
-    now = datetime.now(pytz.timezone('Europe/Bucharest'))
-    if target_time <= now:
-        return 0
+    def get_formatted_wait_time(self, seconds: float) -> str:
+        """Format wait time in a human-readable format"""
+        if seconds <= 0:
+            return "0s"
+            
+        minutes = int(seconds // 60)
+        remaining_seconds = int(seconds % 60)
         
-    delta = target_time - now
-    return max(0, delta.total_seconds())  # Ensure non-negative
+        if minutes > 0:
+            return f"{minutes}m {remaining_seconds}s"
+        return f"{remaining_seconds}s"
+
+    def validate_and_track_timing(self, operation_name: str, 
+                                start_time: datetime,
+                                max_duration_seconds: int = 30) -> bool:
+        """
+        Validate operation timing and track performance
+        Returns True if operation completed within expected timeframe
+        """
+        end_time = self.get_current_time()
+        duration = (end_time - start_time).total_seconds()
+        
+        self.logger.info(f"{operation_name} completed in {duration:.2f} seconds")
+        
+        if duration > max_duration_seconds:
+            self.logger.warning(
+                f"{operation_name} took longer than expected: {duration:.2f}s > {max_duration_seconds}s"
+            )
+            return False
+        return True
+
+    def is_draw_time(self, tolerance: Optional[int] = None) -> bool:
+        """Check if current time is a draw time within tolerance"""
+        current_time = self.get_current_time()
+        minutes_past = current_time.minute % self.draw_interval_minutes
+        return abs(minutes_past) <= (tolerance or self.timing_tolerance)
+
+    def is_evaluation_time(self, tolerance: Optional[int] = None) -> bool:
+        """Check if it's time to evaluate based on last draw"""
+        if self.next_draw_time is None:
+            return False
+            
+        current_time = self.get_current_time()
+        eval_time = self.get_evaluation_time(self.next_draw_time)
+        return self.is_within_tolerance(current_time, eval_time, tolerance)
+
+    def log_timing_status(self):
+        """Log current timing status for monitoring"""
+        time_to_draw, time_to_eval, time_to_fetch = self.get_wait_times()
+        
+        self.logger.info(
+            f"Timing Status:\n"
+            f"- Next draw in: {self.get_formatted_wait_time(time_to_draw)}\n"
+            f"- Next evaluation in: {self.get_formatted_wait_time(time_to_eval)}\n"
+            f"- Next fetch in: {self.get_formatted_wait_time(time_to_fetch)}"
+        )
 
 if __name__ == "__main__":
     # Test the scheduler
     scheduler = DrawScheduler()
-    # Use Europe/Bucharest timezone (UTC+2)
-    now = datetime.now(scheduler.timezone)
-    
+    current_time = scheduler.get_current_time()
     next_draw = scheduler.get_next_draw_time()
-    evaluation_time = scheduler.get_evaluation_time(next_draw)
+    eval_time = scheduler.get_evaluation_time(next_draw)
     
-    print(f"Current time (UTC+2): {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Current time (Bucharest): {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Next draw at: {next_draw.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Evaluate at: {evaluation_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Time until next draw: {scheduler.get_formatted_time_remaining()}")
+    print(f"Evaluation at: {eval_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Test wait times
+    scheduler.log_timing_status()

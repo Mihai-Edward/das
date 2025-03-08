@@ -4,6 +4,7 @@ import importlib
 import platform
 from datetime import datetime
 import pytz
+import logging
 
 # Fix the path - add src directory directly
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,17 +14,7 @@ sys.path.insert(0, src_dir)
 sys.path.insert(0, project_root)
 
 def check_import(module_name):
-    """
-    Try to import a module and report its status.
-    
-    Args:
-        module_name (str): Name of module to import
-        
-    Returns:
-        tuple: (success, module)
-            - success (bool): True if import successful
-            - module: The imported module if successful, None otherwise
-    """
+    """Try to import a module and report its status."""
     print(f"\nTrying to import: {module_name}")
     try:
         module = importlib.import_module(module_name)
@@ -39,25 +30,102 @@ def check_environment():
     print("\nEnvironment Information:")
     print(f"Python Version: {sys.version}")
     print(f"Platform: {platform.platform()}")
-    print(f"Current UTC Time: {datetime.now(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Check timezone configuration
+    bucharest_tz = pytz.timezone('Europe/Bucharest')
+    utc_now = datetime.now(pytz.UTC)
+    bucharest_now = utc_now.astimezone(bucharest_tz)
+    
+    print(f"Current UTC Time: {utc_now.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Current Bucharest Time: {bucharest_now.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Current Working Directory: {os.getcwd()}")
     print(f"Project Root: {project_root}")
     print(f"Source Directory: {src_dir}")
 
-def check_paths():
-    """Check Python path configuration."""
-    print("\nPython Path Configuration:")
-    for i, path in enumerate(sys.path):
-        print(f"  {i}: {path}")
+def check_automation_components():
+    """Check automation-specific components and their configurations."""
+    print("\nAutomation Components Check:")
+    
+    # Check scheduler
+    try:
+        from automation.scheduler import DrawScheduler
+        scheduler = DrawScheduler()
+        next_draw = scheduler.get_next_draw_time()
+        eval_time = scheduler.get_evaluation_time(next_draw)
+        print("✓ Scheduler initialized successfully")
+        print(f"  Next draw time: {next_draw.strftime('%H:%M:%S')}")
+        print(f"  Next evaluation time: {eval_time.strftime('%H:%M:%S')}")
+    except Exception as e:
+        print(f"✗ Scheduler check failed: {e}")
+    
+    # Check operations
+    try:
+        from automation.operations import Operations
+        ops = Operations()
+        print("✓ Operations initialized successfully")
+        validation = ops.validate_system_state()
+        if validation.success:
+            print("✓ System state validation passed")
+            for key, value in validation.data.items():
+                print(f"  - {key}: {value}")
+        else:
+            print(f"✗ System state validation failed: {validation.error}")
+    except Exception as e:
+        print(f"✗ Operations check failed: {e}")
+    
+    # Check cycle manager
+    try:
+        from automation.cycle_manager import CycleManager, PredictionState
+        manager = CycleManager()
+        print("✓ Cycle Manager initialized successfully")
+        print(f"  Current state: {manager.state.value}")
+        print(f"  States available: {[state.value for state in PredictionState]}")
+    except Exception as e:
+        print(f"✗ Cycle Manager check failed: {e}")
+
+def check_timing_configuration():
+    """Verify timing-related configurations and tolerances."""
+    print("\nTiming Configuration Check:")
+    
+    try:
+        from automation.scheduler import DrawScheduler
+        scheduler = DrawScheduler()
+        
+        # Check basic timing parameters
+        print(f"Draw interval: {scheduler.draw_interval_minutes} minutes")
+        print(f"Post-draw wait: {scheduler.post_draw_wait_seconds} seconds")
+        print(f"Timing tolerance: {scheduler.timing_tolerance} seconds")
+        
+        # Test time calculations
+        current = scheduler.get_current_time()
+        next_draw = scheduler.get_next_draw_time()
+        eval_time = scheduler.get_evaluation_time(next_draw)
+        
+        print("\nTiming Calculations Test:")
+        print(f"Current time: {current.strftime('%H:%M:%S')}")
+        print(f"Next draw: {next_draw.strftime('%H:%M:%S')}")
+        print(f"Next evaluation: {eval_time.strftime('%H:%M:%S')}")
+        
+        # Verify tolerances
+        time_to_draw = (next_draw - current).total_seconds()
+        time_to_eval = (eval_time - current).total_seconds()
+        
+        print("\nTiming Windows:")
+        print(f"Time until next draw: {time_to_draw:.1f} seconds")
+        print(f"Time until evaluation: {time_to_eval:.1f} seconds")
+        
+    except Exception as e:
+        print(f"✗ Timing configuration check failed: {e}")
 
 def check_directories():
-    """Check required project directories."""
+    """Check required project directories with automation focus."""
     dirs_to_check = [
         ('Project Root', project_root),
         ('Source Directory', src_dir),
         ('Config Directory', os.path.join(project_root, 'config')),
         ('Automation Directory', os.path.join(project_root, 'automation')),
         ('Data Directory', os.path.join(project_root, 'data')),
+        ('Processed Data', os.path.join(project_root, 'data', 'processed')),
         ('Models Directory', os.path.join(project_root, 'models')),
         ('Drivers Directory', os.path.join(project_root, 'drivers'))
     ]
@@ -67,12 +135,33 @@ def check_directories():
         if os.path.exists(dir_path):
             print(f"✓ {name}: {dir_path}")
             init_file = os.path.join(dir_path, '__init__.py')
-            if os.path.exists(init_file):
-                print(f"  ✓ __init__.py present")
-            else:
-                print(f"  ✗ __init__.py missing")
+            if name in ['Source Directory', 'Config Directory', 'Automation Directory']:
+                if os.path.exists(init_file):
+                    print(f"  ✓ __init__.py present")
+                else:
+                    print(f"  ✗ __init__.py missing")
         else:
             print(f"✗ {name} missing: {dir_path}")
+
+def check_automation_files():
+    """Check automation-specific files."""
+    files_to_check = [
+        ('Scheduler', os.path.join(project_root, 'automation', 'scheduler.py')),
+        ('Operations', os.path.join(project_root, 'automation', 'operations.py')),
+        ('Cycle Manager', os.path.join(project_root, 'automation', 'cycle_manager.py')),
+        ('Automation Runner', os.path.join(project_root, 'automation', 'automation_runner.py')),
+        ('Paths Config', os.path.join(project_root, 'config', 'paths.py'))
+    ]
+    
+    print("\nAutomation Files Check:")
+    for name, file_path in files_to_check:
+        if os.path.exists(file_path):
+            print(f"✓ {name} present: {file_path}")
+            # Check file modification time
+            mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+            print(f"  Last modified: {mod_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        else:
+            print(f"✗ {name} missing: {file_path}")
 
 def check_critical_files():
     """Check presence of critical project files."""
@@ -147,16 +236,18 @@ def verify_selenium_setup():
         print(f"✗ Selenium setup incomplete: {e}")
 
 def run_diagnostics():
-    """Run all diagnostic checks."""
+    """Run all diagnostic checks with focus on automation system."""
     try:
         print("="*50)
-        print("Running Project Diagnostics")
+        print("Running Project Diagnostics (Automation Focus)")
         print(f"Timestamp: {datetime.now(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
         print("="*50)
         
         check_environment()
-        check_paths()
         check_directories()
+        check_automation_files()
+        check_automation_components()
+        check_timing_configuration()
         check_critical_files()
         check_imports()
         verify_selenium_setup()

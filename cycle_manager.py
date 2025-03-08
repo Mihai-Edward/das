@@ -1,285 +1,373 @@
-# automation/cycle_manager.py
-
 import os
 import sys
 import time
-from datetime import datetime, timedelta
-import pytz
+from datetime import datetime
 from enum import Enum
+import logging
+from typing import Optional, Dict, Any, Tuple
 
-# Add project root to path if necessary
+# Add project root to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Import necessary modules
-from automation.scheduler import DrawScheduler
+from scheduler import DrawScheduler
 from config.paths import PATHS, ensure_directories
 
-# Define the standard timezone to use
-TIMEZONE = pytz.timezone('Europe/Bucharest')  # UTC+2
-
-# Define states as enum for clarity and type safety
 class PredictionState(Enum):
+    """States for the prediction cycle state machine"""
+    STARTUP = "startup"
     FETCHING = "fetching"
     ANALYZING = "analyzing"
     PREDICTING = "predicting"
     LEARNING = "learning"
     WAITING = "waiting"
-    PREPARING_TO_EVALUATE = "preparing_to_evaluate"
     EVALUATING = "evaluating"
+    ERROR = "error"
 
-class PredictionCycleManager:
-    def __init__(self):
-        """Initialize the cycle manager with default settings."""
-        # Status tracking
-        self.active = True
-        self.state = PredictionState.FETCHING  # Start with fetching state
-        self.last_success = None
-        self.last_error = None
-        self.consecutive_failures = 0
-        
-        # Configuration
-        self.max_failures = 5
-        self.retry_delay = 30  # seconds
-        self.fetch_retries = 3
-        self.continuous_learning_enabled = False  # Default to disabled
-        
+class CycleManager:
+    def __init__(self, 
+                 max_failures: int = 5,
+                 retry_delay: int = 30,
+                 enable_learning: bool = False):
+        """
+        Initialize the cycle manager with configuration parameters
+        """
         # Initialize scheduler
         self.scheduler = DrawScheduler()
         
-        # Initialize prediction data
-        self.current_prediction = None
-        self.current_probabilities = None
+        # Configuration
+        self.max_failures = max_failures
+        self.retry_delay = retry_delay
+        self.continuous_learning_enabled = enable_learning
         
-        # Collected draws for analysis
-        self.collected_draws = None
+        # State tracking
+        self.state = PredictionState.STARTUP
+        self.active = True
+        self.consecutive_failures = 0
         
-        # Log initialization
-        self._log_status("Prediction cycle manager initialized")
+        # Performance tracking
+        self.cycle_metrics = {
+            'last_success': None,
+            'last_error': None,
+            'cycle_count': 0,
+            'state_transitions': [],
+            'operation_durations': {}
+        }
         
-    def get_status(self):
-        """Get the current status of the cycle manager."""
+        # Set up logging
+        self.logger = logging.getLogger('CycleManager')
+        self._setup_logging()
+        
+        # Initialize paths
+        ensure_directories()
+        
+        self.logger.info("Cycle Manager initialized")
+        self._log_configuration()
+
+    def _setup_logging(self):
+        """Configure logging for the cycle manager"""
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - [%(levelname)s] - %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
+
+    def _log_configuration(self):
+        """Log current configuration settings"""
+        self.logger.info(
+            f"\nConfiguration:"
+            f"\n- Max failures: {self.max_failures}"
+            f"\n- Retry delay: {self.retry_delay}s"
+            f"\n- Continuous learning: {'Enabled' if self.continuous_learning_enabled else 'Disabled'}"
+            f"\n- Initial state: {self.state.value}"
+        )
+
+    def _track_state_transition(self, from_state: PredictionState, to_state: PredictionState):
+        """Track state transitions for monitoring"""
+        transition_time = self.scheduler.get_current_time()
+        self.state_transitions.append({
+            'from': from_state.value,
+            'to': to_state.value,
+            'time': transition_time
+        })
+        self.logger.info(f"State transition: {from_state.value} -> {to_state.value}")
+
+    def _handle_failure(self, operation: str, error: str) -> bool:
+        """
+        Handle operation failures with retry logic
+        Returns: True if should retry, False if should stop
+        """
+        self.consecutive_failures += 1
+        self.last_error = {
+            'operation': operation,
+            'error': error,
+            'time': self.scheduler.get_current_time()
+        }
+        
+        self.logger.error(
+            f"Failure in {operation}: {error}\n"
+            f"Consecutive failures: {self.consecutive_failures}/{self.max_failures}"
+        )
+        
+        if self.consecutive_failures >= self.max_failures:
+            self.logger.critical("Maximum consecutive failures reached, stopping cycle")
+            self.active = False
+            return False
+            
+        time.sleep(self.retry_delay)
+        return True
+
+    def _transition_state(self, new_state: PredictionState):
+        """Safely transition to a new state with logging"""
+        old_state = self.state
+        self.state = new_state
+        self._track_state_transition(old_state, new_state)
+
+    async def _handle_startup(self) -> bool:
+        """Handle system startup and initialization"""
+        try:
+            self.logger.info("System startup initiated")
+            
+            # Determine current time and next draw
+            current_time = self.scheduler.get_current_time()
+            next_draw = self.scheduler.get_next_draw_time()
+            
+            self.logger.info(
+                f"Startup complete:"
+                f"\n- Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                f"\n- Next draw: {next_draw.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+            
+            # Transition to fetching state
+            self._transition_state(PredictionState.FETCHING)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Startup failed: {str(e)}")
+            self._handle_failure("startup", str(e))
+            return False
+
+    async def _handle_fetching(self) -> bool:
+        """Handle data fetching state"""
+        try:
+            from data_collector_selenium import KinoDataCollector
+            
+            self.logger.info("Starting data collection")
+            collector = KinoDataCollector()
+            
+            # Execute fetch with retry capability
+            start_time = self.scheduler.get_current_time()
+            draws = collector.fetch_latest_draws()
+            
+            if not draws:
+                raise Exception("No draws collected")
+                
+            # Validate timing
+            self.scheduler.validate_and_track_timing("Data collection", start_time)
+            
+            # On success, transition to analyzing
+            self._transition_state(PredictionState.ANALYZING)
+            self.consecutive_failures = 0
+            return True
+            
+        except Exception as e:
+            return self._handle_failure("fetching", str(e))
+
+    async def _handle_analyzing(self) -> bool:
+        """Handle data analysis state"""
+        try:
+            from data_analysis import DataAnalysis
+            
+            self.logger.info("Starting data analysis")
+            start_time = self.scheduler.get_current_time()
+            
+            # Execute analysis with collected data
+            analysis = DataAnalysis(self.collected_draws)
+            analysis_results = analysis.perform_complete_analysis()
+            
+            if not analysis_results:
+                raise Exception("Analysis failed to produce results")
+                
+            # Validate timing
+            self.scheduler.validate_and_track_timing("Data analysis", start_time)
+            
+            # On success, transition to predicting
+            self._transition_state(PredictionState.PREDICTING)
+            self.consecutive_failures = 0
+            return True
+            
+        except Exception as e:
+            return self._handle_failure("analysis", str(e))
+
+    async def _handle_predicting(self) -> bool:
+        """Handle prediction generation state"""
+        try:
+            from lottery_predictor import LotteryPredictor
+            
+            self.logger.info("Generating predictions")
+            start_time = self.scheduler.get_current_time()
+            
+            predictor = LotteryPredictor()
+            predictions = predictor.generate_predictions()
+            
+            if not predictions:
+                raise Exception("Failed to generate predictions")
+                
+            # Validate timing
+            self.scheduler.validate_and_track_timing("Prediction generation", start_time)
+            
+            # On success, transition to learning or waiting based on configuration
+            if self.continuous_learning_enabled:
+                self._transition_state(PredictionState.LEARNING)
+            else:
+                self._transition_state(PredictionState.WAITING)
+                
+            self.consecutive_failures = 0
+            return True
+            
+        except Exception as e:
+            return self._handle_failure("prediction", str(e))
+
+    async def _handle_learning(self) -> bool:
+        """Handle continuous learning state"""
+        try:
+            if not self.continuous_learning_enabled:
+                self.logger.info("Continuous learning disabled, skipping")
+                self._transition_state(PredictionState.WAITING)
+                return True
+                
+            self.logger.info("Executing continuous learning cycle")
+            start_time = self.scheduler.get_current_time()
+            
+            # Execute learning cycle
+            from draw_handler import DrawHandler
+            handler = DrawHandler()
+            success = handler.run_continuous_learning_cycle()
+            
+            # Validate timing
+            self.scheduler.validate_and_track_timing("Continuous learning", start_time)
+            
+            # Always transition to waiting, regardless of success
+            self._transition_state(PredictionState.WAITING)
+            
+            # Learning failures don't count towards consecutive failures
+            if not success:
+                self.logger.warning("Learning cycle completed with warnings")
+                
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Learning error (non-critical): {str(e)}")
+            self._transition_state(PredictionState.WAITING)
+            return True
+
+    async def _handle_waiting(self) -> bool:
+        """Handle waiting state with precise timing"""
+        try:
+            next_draw = self.scheduler.get_next_draw_time()
+            eval_time = self.scheduler.get_evaluation_time(next_draw)
+            
+            while self.active:
+                current_time = self.scheduler.get_current_time()
+                
+                # Check if it's time to evaluate
+                if self.scheduler.is_within_tolerance(current_time, eval_time):
+                    self._transition_state(PredictionState.EVALUATING)
+                    return True
+                    
+                # Calculate and log waiting time
+                time_to_eval = (eval_time - current_time).total_seconds()
+                if time_to_eval > 60:
+                    self.logger.info(f"Waiting {int(time_to_eval/60)}m {int(time_to_eval%60)}s until evaluation")
+                    time.sleep(30)  # Longer sleep for longer waits
+                else:
+                    self.logger.info(f"Waiting {int(time_to_eval)}s until evaluation")
+                    time.sleep(5)  # Shorter sleep for final countdown
+                    
+            return True
+            
+        except Exception as e:
+            return self._handle_failure("waiting", str(e))
+
+    async def _handle_evaluating(self) -> bool:
+        """Handle evaluation state"""
+        try:
+            from prediction_evaluator import PredictionEvaluator
+            
+            self.logger.info("Starting prediction evaluation")
+            start_time = self.scheduler.get_current_time()
+            
+            evaluator = PredictionEvaluator()
+            success = evaluator.evaluate_past_predictions()
+            
+            # Validate timing
+            self.scheduler.validate_and_track_timing("Evaluation", start_time)
+            
+            if success:
+                self.consecutive_failures = 0
+                self.last_success = self.scheduler.get_current_time()
+            
+            # Always transition back to fetching
+            self._transition_state(PredictionState.FETCHING)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Evaluation error: {str(e)}")
+            self._transition_state(PredictionState.FETCHING)
+            return True
+
+    async def run_cycle(self):
+        """Main cycle execution loop"""
+        state_handlers = {
+            PredictionState.STARTUP: self._handle_startup,
+            PredictionState.FETCHING: self._handle_fetching,
+            PredictionState.ANALYZING: self._handle_analyzing,
+            PredictionState.PREDICTING: self._handle_predicting,
+            PredictionState.LEARNING: self._handle_learning,
+            PredictionState.WAITING: self._handle_waiting,
+            PredictionState.EVALUATING: self._handle_evaluating
+        }
+        
+        self.logger.info("Starting prediction cycle")
+        
+        while self.active:
+            try:
+                handler = state_handlers.get(self.state)
+                if handler:
+                    if not await handler():
+                        break
+                else:
+                    self.logger.error(f"No handler for state: {self.state}")
+                    break
+                    
+            except Exception as e:
+                self.logger.error(f"Critical error in cycle: {str(e)}")
+                if not self._handle_failure("cycle", str(e)):
+                    break
+                    
+        self.logger.info("Prediction cycle stopped")
+
+    def get_status(self) -> Dict[str, Any]:
+        """Get current system status"""
         return {
             'active': self.active,
             'state': self.state.value,
+            'consecutive_failures': self.consecutive_failures,
             'last_success': self.last_success,
             'last_error': self.last_error,
-            'consecutive_failures': self.consecutive_failures,
-            'next_draw': self.scheduler.get_next_draw_time(),
-            'next_eval': self.scheduler.get_evaluation_time(self.scheduler.get_next_draw_time())
+            'cycle_count': self.cycle_metrics['cycle_count'],
+            'next_draw': self.scheduler.next_draw_time,
+            'next_evaluation': self.scheduler.get_evaluation_time(self.scheduler.next_draw_time)
         }
-        
-    def _log_status(self, message):
-        """Log a status message with timestamp and current state."""
-        # Use UTC+2 timezone for logs
-        timestamp = datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
-        state_info = f"[{self.state.value}]" if hasattr(self, 'state') else ""
-        print(f"[{timestamp}] {state_info} {message}")
-        
-    def _handle_failure(self, stage, message):
-        """Handle a failure during operation."""
-        self.consecutive_failures += 1
-        self.last_error = {'stage': stage, 'message': message, 'time': datetime.now(TIMEZONE)}
-        self._log_status(f"Failure in {stage}: {message}")
-        self._log_status(f"Consecutive failures: {self.consecutive_failures}/{self.max_failures}")
-        
-        # Exit if max failures reached
-        if self.consecutive_failures >= self.max_failures:
-            self._log_status("Maximum consecutive failures reached, stopping cycle")
-            self.active = False
-        
-        # Add delay before retrying
-        time.sleep(self.retry_delay)
-        
-    def collect_data(self):
-        """Collect data for prediction."""
-        from automation.operations import collect_data_operation
-        success, message = collect_data_operation(num_draws=self.fetch_retries * 3)
-        if success:
-            self.collected_draws = message["draws"]  # Store collected draws for analysis
-        return success, message
-        
-    def analyze_data(self):
-        """Analyze collected data."""
-        from automation.operations import analyze_data_operation
-        success, message = analyze_data_operation(self.collected_draws)  # Pass collected draws to the function
-        return success, message
-        
-    def generate_prediction(self, for_draw_time=None):
-        """Generate prediction for next draw."""
-        from automation.operations import generate_prediction_operation
-        success, result = generate_prediction_operation(for_draw_time=for_draw_time)
-        
-        # Store prediction and probabilities if successful
-        if success and isinstance(result, dict):
-            self.current_prediction = result.get("predictions")
-            self.current_probabilities = result.get("probabilities")
-            
-        return success, result
-        
-    def evaluate_prediction(self):
-        """Evaluate past predictions."""
-        from automation.operations import evaluate_prediction_operation
-        success, message = evaluate_prediction_operation()
-        
-        # Track status
-        if success:
-            self.last_success = datetime.now(TIMEZONE)
-            self.consecutive_failures = 0
-            
-        return success, message
-        
-    def run_continuous_learning(self):
-        """Run the continuous learning cycle after evaluation."""
-        from automation.operations import run_continuous_learning
-        success, message = run_continuous_learning()
-        
-        # Track status
-        if success:
-            self.last_success = datetime.now(TIMEZONE)
-            
-        # Don't increment failure counter for learning failures
-        # as this is not a critical operation
-        return success, message
-        
-    def run_cycle(self):
-        """Run the main prediction cycle using state machine approach."""
-        self._log_status("Starting prediction cycle with state machine approach")
-        
-        # Main cycle loop
-        while self.active and self.consecutive_failures < self.max_failures:
-            try:
-                # Log current state
-                self._log_status(f"Current state: {self.state.value}")
-                
-                # Handle current state
-                if self.state == PredictionState.FETCHING:
-                    self._handle_fetching_state()
-                elif self.state == PredictionState.ANALYZING:
-                    self._handle_analyzing_state()
-                elif self.state == PredictionState.PREDICTING:
-                    self._handle_predicting_state()
-                elif self.state == PredictionState.LEARNING:
-                    self._handle_learning_state()
-                elif self.state == PredictionState.WAITING:
-                    self._handle_waiting_state()
-                elif self.state == PredictionState.PREPARING_TO_EVALUATE:
-                    self._handle_preparing_to_evaluate_state()
-                elif self.state == PredictionState.EVALUATING:
-                    self._handle_evaluating_state()
-                
-                # Brief pause between state checks
-                time.sleep(3)
-                
-            except Exception as e:
-                self._handle_failure("cycle", str(e))
-                time.sleep(self.retry_delay)
 
-    def _handle_fetching_state(self):
-        """Handle the fetching state operations and transitions."""
-        self._log_status("Collecting data...")
-        success, message = self.collect_data()
-        
-        if success:
-            # On success, transition to ANALYZING state
-            self.state = PredictionState.ANALYZING
-        else:
-            # On failure, retry in current state
-            self._handle_failure("data_collection", message)
-    
-    def _handle_analyzing_state(self):
-        """Handle the analyzing state operations and transitions."""
-        self._log_status("Analyzing data...")
-        success, message = self.analyze_data()
-        
-        if success:
-            # On success, transition to PREDICTING state
-            self.state = PredictionState.PREDICTING
-        else:
-            # On failure, retry in current state
-            self._handle_failure("analysis", message)
-    
-    def _handle_predicting_state(self):
-        """Handle the predicting state operations and transitions."""
-        self._log_status("Generating prediction...")
-        next_draw_time = self.scheduler.get_next_draw_time()
-        success, result = self.generate_prediction(for_draw_time=next_draw_time)
-        
-        if success:
-            # On success, transition to LEARNING or WAITING state based on configuration
-            if self.continuous_learning_enabled:
-                self.state = PredictionState.LEARNING
-            else:
-                self.state = PredictionState.WAITING
-                self._log_status(f"Prediction complete. Waiting for next draw at {next_draw_time.strftime('%H:%M:%S')}")
-        else:
-            # On failure, retry in current state
-            self._handle_failure("prediction", str(result))
-    
-    def _handle_learning_state(self):
-        """Handle the continuous learning state operations and transitions."""
-        if self.continuous_learning_enabled:
-            self._log_status("Running continuous learning...")
-            success, message = self.run_continuous_learning()
-            
-            if success:
-                self._log_status("Continuous learning completed successfully")
-            else:
-                self._log_status(f"Note: Continuous learning failed: {message}")
-                # Learning failures don't stop the cycle
-        else:
-            self._log_status("Continuous learning disabled, skipping")
-            
-        # Always transition to WAITING state after learning (success or failure)
-        self.state = PredictionState.WAITING
-        next_draw_time = self.scheduler.get_next_draw_time()
-        self._log_status(f"Waiting for next draw at {next_draw_time.strftime('%H:%M:%S')}")
-    
-    def _handle_waiting_state(self):
-        """Handle the waiting state operations and transitions."""
-        next_draw_time = self.scheduler.get_next_draw_time()
-        evaluation_time = self.scheduler.get_evaluation_time(next_draw_time)
-        now = datetime.now(TIMEZONE)
-        
-        # Calculate time until evaluation
-        time_to_evaluate = (evaluation_time - now).total_seconds()
-        
-        # Transition to PREPARING_TO_EVALUATE if less than 10 seconds to draw
-        if time_to_evaluate <= 10:
-            self._log_status("Preparing to evaluate draw")
-            self.state = PredictionState.PREPARING_TO_EVALUATE
-            return
-            
-        # Otherwise, display waiting status
-        time_to_next_draw = (next_draw_time - now).total_seconds()
-        if time_to_next_draw > 60:  # If more than a minute
-            self._log_status(f"Waiting {int(time_to_next_draw/60)} minutes {int(time_to_next_draw%60)} seconds until next draw")
-        else:
-            self._log_status(f"Waiting {int(time_to_next_draw)} seconds until next draw")
-        
-        # Sleep longer during waiting to reduce log spam
-        time.sleep(10)
-    
-    def _handle_preparing_to_evaluate_state(self):
-        """Handle the preparing to evaluate state operations and transitions."""
-        self._log_status("Preparing for evaluation")
-        time.sleep(10)  # Wait for 10 seconds to ensure the draw has occurred
-        self.state = PredictionState.EVALUATING
-    
-    def _handle_evaluating_state(self):
-        """Handle the evaluating state operations and transitions."""
-        self._log_status("Evaluating predictions...")
-        success, message = self.evaluate_prediction()
-        
-        if success:
-            self._log_status("Evaluation complete")
-            self.last_success = datetime.now(TIMEZONE)
-            self.consecutive_failures = 0
-        else:
-            self._handle_failure("evaluation", str(message))
-            # Evaluation failures don't stop the cycle
-        
-        # Always transition back to FETCHING to start the cycle again
-        self.state = PredictionState.FETCHING
+if __name__ == "__main__":
+    # Test the cycle manager
+    manager = CycleManager(enable_learning=True)
+    import asyncio
+    asyncio.run(manager.run_cycle())

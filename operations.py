@@ -1,284 +1,283 @@
-
 import os
 import sys
-import time
-from datetime import datetime, timedelta
-import pytz
-from enum import Enum
+import logging
+from typing import Dict, List, Tuple, Optional, Any
+from datetime import datetime
+import pandas as pd
+import numpy as np
 
-# Add project root to path if necessary
+# Add project root to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Import necessary modules
-from automation.scheduler import DrawScheduler
 from config.paths import PATHS, ensure_directories
+from lottery_predictor import LotteryPredictor
+from data_collector_selenium import KinoDataCollector
+from data_analysis import DataAnalysis
+from prediction_evaluator import PredictionEvaluator
 
-# Define the standard timezone to use
-TIMEZONE = pytz.timezone('Europe/Bucharest')  # UTC+2
+class OperationResult:
+    """Standardized operation result container"""
+    def __init__(self, success: bool, data: Any = None, error: str = None):
+        self.success = success
+        self.data = data
+        self.error = error
+        self.timestamp = datetime.now()
 
-# Define states as enum for clarity and type safety
-class PredictionState(Enum):
-    FETCHING = "fetching"
-    ANALYZING = "analyzing"
-    PREDICTING = "predicting"
-    LEARNING = "learning"
-    WAITING = "waiting"
-    PREPARING_TO_EVALUATE = "preparing_to_evaluate"
-    EVALUATING = "evaluating"
-
-class PredictionCycleManager:
+class Operations:
+    """
+    Pure operations handler for the lottery prediction system.
+    No timing or state management logic - only operations.
+    """
     def __init__(self):
-        """Initialize the cycle manager with default settings."""
-        # Status tracking
-        self.active = True
-        self.state = PredictionState.FETCHING  # Start with fetching state
-        self.last_success = None
-        self.last_error = None
-        self.consecutive_failures = 0
+        # Initialize logging
+        self.logger = logging.getLogger('Operations')
+        self._setup_logging()
         
-        # Configuration
-        self.max_failures = 5
-        self.retry_delay = 30  # seconds
-        self.fetch_retries = 3
-        self.continuous_learning_enabled = False  # Default to disabled
+        # Ensure directories exist
+        ensure_directories()
         
-        # Initialize scheduler
-        self.scheduler = DrawScheduler()
-        
-        # Initialize prediction data
-        self.current_prediction = None
-        self.current_probabilities = None
-        
-        # Collected draws for analysis
-        self.collected_draws = None
-        
-        # Log initialization
-        self._log_status("Prediction cycle manager initialized")
-        
-    def get_status(self):
-        """Get the current status of the cycle manager."""
-        return {
-            'active': self.active,
-            'state': self.state.value,
-            'last_success': self.last_success,
-            'last_error': self.last_error,
-            'consecutive_failures': self.consecutive_failures,
-            'next_draw': self.scheduler.get_next_draw_time(),
-            'next_eval': self.scheduler.get_evaluation_time(self.scheduler.get_next_draw_time())
+        # Initialize operation trackers
+        self.operation_metrics = {
+            'fetch_count': 0,
+            'analysis_count': 0,
+            'prediction_count': 0,
+            'evaluation_count': 0,
+            'learning_count': 0
         }
         
-    def _log_status(self, message):
-        """Log a status message with timestamp and current state."""
-        # Use UTC+2 timezone for logs
-        timestamp = datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
-        state_info = f"[{self.state.value}]" if hasattr(self, 'state') else ""
-        print(f"[{timestamp}] {state_info} {message}")
-        
-    def _handle_failure(self, stage, message):
-        """Handle a failure during operation."""
-        self.consecutive_failures += 1
-        self.last_error = {'stage': stage, 'message': message, 'time': datetime.now(TIMEZONE)}
-        self._log_status(f"Failure in {stage}: {message}")
-        self._log_status(f"Consecutive failures: {self.consecutive_failures}/{self.max_failures}")
-        
-        # Exit if max failures reached
-        if self.consecutive_failures >= self.max_failures:
-            self._log_status("Maximum consecutive failures reached, stopping cycle")
-            self.active = False
-        
-        # Add delay before retrying
-        time.sleep(self.retry_delay)
-        
-    def collect_data(self):
-        """Collect data for prediction."""
-        from automation.operations import collect_data_operation
-        success, message = collect_data_operation(num_draws=self.fetch_retries * 3)
-        if success:
-            self.collected_draws = message["draws"]  # Store collected draws for analysis
-        return success, message
-        
-    def analyze_data(self):
-        """Analyze collected data."""
-        from automation.operations import analyze_data_operation
-        success, message = analyze_data_operation(self.collected_draws)  # Pass collected draws to the function
-        return success, message
-        
-    def generate_prediction(self, for_draw_time=None):
-        """Generate prediction for next draw."""
-        from automation.operations import generate_prediction_operation
-        success, result = generate_prediction_operation(for_draw_time=for_draw_time)
-        
-        # Store prediction and probabilities if successful
-        if success and isinstance(result, dict):
-            self.current_prediction = result.get("predictions")
-            self.current_probabilities = result.get("probabilities")
-            
-        return success, result
-        
-    def evaluate_prediction(self):
-        """Evaluate past predictions."""
-        from automation.operations import evaluate_prediction_operation
-        success, message = evaluate_prediction_operation()
-        
-        # Track status
-        if success:
-            self.last_success = datetime.now(TIMEZONE)
-            self.consecutive_failures = 0
-            
-        return success, message
-        
-    def run_continuous_learning(self):
-        """Run the continuous learning cycle after evaluation."""
-        from automation.operations import run_continuous_learning
-        success, message = run_continuous_learning()
-        
-        # Track status
-        if success:
-            self.last_success = datetime.now(TIMEZONE)
-            
-        # Don't increment failure counter for learning failures
-        # as this is not a critical operation
-        return success, message
-        
-    def run_cycle(self):
-        """Run the main prediction cycle using state machine approach."""
-        self._log_status("Starting prediction cycle with state machine approach")
-        
-        # Main cycle loop
-        while self.active and self.consecutive_failures < self.max_failures:
-            try:
-                # Log current state
-                self._log_status(f"Current state: {self.state.value}")
-                
-                # Handle current state
-                if self.state == PredictionState.FETCHING:
-                    self._handle_fetching_state()
-                elif self.state == PredictionState.ANALYZING:
-                    self._handle_analyzing_state()
-                elif self.state == PredictionState.PREDICTING:
-                    self._handle_predicting_state()
-                elif self.state == PredictionState.LEARNING:
-                    self._handle_learning_state()
-                elif self.state == PredictionState.WAITING:
-                    self._handle_waiting_state()
-                elif self.state == PredictionState.PREPARING_TO_EVALUATE:
-                    self._handle_preparing_to_evaluate_state()
-                elif self.state == PredictionState.EVALUATING:
-                    self._handle_evaluating_state()
-                
-                # Brief pause between state checks
-                time.sleep(3)
-                
-            except Exception as e:
-                self._handle_failure("cycle", str(e))
-                time.sleep(self.retry_delay)
+        # Cache for operation results
+        self.latest_results = {
+            'fetch': None,
+            'analysis': None,
+            'prediction': None,
+            'evaluation': None
+        }
 
-    def _handle_fetching_state(self):
-        """Handle the fetching state operations and transitions."""
-        self._log_status("Collecting data...")
-        success, message = self.collect_data()
-        
-        if success:
-            # On success, transition to ANALYZING state
-            self.state = PredictionState.ANALYZING
-        else:
-            # On failure, retry in current state
-            self._handle_failure("data_collection", message)
-    
-    def _handle_analyzing_state(self):
-        """Handle the analyzing state operations and transitions."""
-        self._log_status("Analyzing data...")
-        success, message = self.analyze_data()
-        
-        if success:
-            # On success, transition to PREDICTING state
-            self.state = PredictionState.PREDICTING
-        else:
-            # On failure, retry in current state
-            self._handle_failure("analysis", message)
-    
-    def _handle_predicting_state(self):
-        """Handle the predicting state operations and transitions."""
-        self._log_status("Generating prediction...")
-        next_draw_time = self.scheduler.get_next_draw_time()
-        success, result = self.generate_prediction(for_draw_time=next_draw_time)
-        
-        if success:
-            # On success, transition to LEARNING or WAITING state based on configuration
-            if self.continuous_learning_enabled:
-                self.state = PredictionState.LEARNING
+    def _setup_logging(self):
+        """Configure logging"""
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - [%(levelname)s] - %(message)s'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
+
+    def fetch_latest_draws(self, num_draws: int = 5) -> OperationResult:
+        """Fetch latest draw data from the website"""
+        try:
+            self.logger.info(f"Fetching {num_draws} latest draws")
+            collector = KinoDataCollector()
+            draws = collector.fetch_latest_draws(num_draws=num_draws)
+            
+            if not draws:
+                return OperationResult(False, error="No draws collected")
+                
+            # Validate collected data
+            validated_draws = []
+            for draw_date, numbers in draws:
+                if len(numbers) == 20 and all(1 <= n <= 80 for n in numbers):
+                    validated_draws.append((draw_date, sorted(numbers)))
+                    
+            if not validated_draws:
+                return OperationResult(False, error="No valid draws after validation")
+                
+            self.operation_metrics['fetch_count'] += 1
+            self.latest_results['fetch'] = validated_draws
+            
+            return OperationResult(True, validated_draws)
+            
+        except Exception as e:
+            self.logger.error(f"Fetch operation failed: {str(e)}")
+            return OperationResult(False, error=str(e))
+
+    def analyze_draws(self, draws: List[Tuple[str, List[int]]]) -> OperationResult:
+        """Analyze collected draw data"""
+        try:
+            self.logger.info("Analyzing draw data")
+            
+            if not draws:
+                return OperationResult(False, error="No draws provided for analysis")
+                
+            analyzer = DataAnalysis(draws)
+            
+            analysis_results = {
+                'frequency': analyzer.count_frequency(),
+                'top_numbers': analyzer.get_top_numbers(20),
+                'common_pairs': analyzer.find_common_pairs(),
+                'consecutive_numbers': analyzer.find_consecutive_numbers(),
+                'range_analysis': analyzer.number_range_analysis(),
+                'hot_cold': analyzer.hot_and_cold_numbers()
+            }
+            
+            # Save analysis results
+            analyzer.save_to_excel()
+            
+            self.operation_metrics['analysis_count'] += 1
+            self.latest_results['analysis'] = analysis_results
+            
+            return OperationResult(True, analysis_results)
+            
+        except Exception as e:
+            self.logger.error(f"Analysis operation failed: {str(e)}")
+            return OperationResult(False, error=str(e))
+
+    def generate_prediction(self, historical_data: Optional[pd.DataFrame] = None) -> OperationResult:
+        """Generate predictions for next draw"""
+        try:
+            self.logger.info("Generating prediction")
+            predictor = LotteryPredictor()
+            
+            # Load data if not provided
+            if historical_data is None:
+                historical_data = predictor.load_data()
+                
+            if historical_data is None:
+                return OperationResult(False, error="Failed to load historical data")
+                
+            # Generate prediction
+            predictions, probabilities, analysis = predictor.train_and_predict(historical_data)
+            
+            if predictions is None:
+                return OperationResult(False, error="Failed to generate predictions")
+                
+            result = {
+                'predictions': sorted(predictions),
+                'probabilities': probabilities,
+                'analysis_context': analysis
+            }
+            
+            # Save prediction
+            predictor.save_prediction_to_csv(predictions, probabilities)
+            
+            self.operation_metrics['prediction_count'] += 1
+            self.latest_results['prediction'] = result
+            
+            return OperationResult(True, result)
+            
+        except Exception as e:
+            self.logger.error(f"Prediction operation failed: {str(e)}")
+            return OperationResult(False, error=str(e))
+
+    def evaluate_predictions(self) -> OperationResult:
+        """Evaluate prediction accuracy"""
+        try:
+            self.logger.info("Evaluating predictions")
+            evaluator = PredictionEvaluator()
+            
+            evaluator.evaluate_past_predictions()
+            stats = evaluator.get_performance_stats()
+            
+            if stats is None:
+                return OperationResult(False, error="No evaluation statistics available")
+                
+            self.operation_metrics['evaluation_count'] += 1
+            self.latest_results['evaluation'] = stats
+            
+            return OperationResult(True, stats)
+            
+        except Exception as e:
+            self.logger.error(f"Evaluation operation failed: {str(e)}")
+            return OperationResult(False, error=str(e))
+
+    def run_continuous_learning(self) -> OperationResult:
+        """Execute continuous learning cycle"""
+        try:
+            self.logger.info("Running continuous learning cycle")
+            
+            # Get evaluation stats first
+            eval_result = self.evaluate_predictions()
+            if not eval_result.success:
+                return OperationResult(False, error="Cannot learn without evaluation data")
+                
+            # Load predictor and update models
+            predictor = LotteryPredictor()
+            
+            # Use evaluation results to improve model
+            learning_results = predictor.apply_learning_from_evaluations(eval_result.data)
+            
+            if learning_results:
+                self.operation_metrics['learning_count'] += 1
+                return OperationResult(True, learning_results)
             else:
-                self.state = PredictionState.WAITING
-                self._log_status(f"Prediction complete. Waiting for next draw at {next_draw_time.strftime('%H:%M:%S')}")
-        else:
-            # On failure, retry in current state
-            self._handle_failure("prediction", str(result))
-    
-    def _handle_learning_state(self):
-        """Handle the continuous learning state operations and transitions."""
-        if self.continuous_learning_enabled:
-            self._log_status("Running continuous learning...")
-            success, message = self.run_continuous_learning()
+                return OperationResult(False, error="Learning cycle failed")
+                
+        except Exception as e:
+            self.logger.error(f"Learning operation failed: {str(e)}")
+            return OperationResult(False, error=str(e))
+
+    def get_operation_metrics(self) -> Dict[str, Any]:
+        """Get metrics for all operations"""
+        return {
+            'metrics': self.operation_metrics,
+            'latest_results': {
+                k: (v.timestamp if v else None) 
+                for k, v in self.latest_results.items()
+            }
+        }
+
+    def validate_system_state(self) -> OperationResult:
+        """Validate overall system state and data integrity"""
+        try:
+            validation_results = {
+                'files_exist': True,
+                'data_valid': True,
+                'models_ready': True,
+                'issues': []
+            }
             
-            if success:
-                self._log_status("Continuous learning completed successfully")
-            else:
-                self._log_status(f"Note: Continuous learning failed: {message}")
-                # Learning failures don't stop the cycle
-        else:
-            self._log_status("Continuous learning disabled, skipping")
+            # Check required files
+            required_files = [
+                PATHS['HISTORICAL_DATA'],
+                PATHS['PREDICTIONS'],
+                PATHS['ANALYSIS']
+            ]
             
-        # Always transition to WAITING state after learning (success or failure)
-        self.state = PredictionState.WAITING
-        next_draw_time = self.scheduler.get_next_draw_time()
-        self._log_status(f"Waiting for next draw at {next_draw_time.strftime('%H:%M:%S')}")
-    
-    def _handle_waiting_state(self):
-        """Handle the waiting state operations and transitions."""
-        next_draw_time = self.scheduler.get_next_draw_time()
-        evaluation_time = self.scheduler.get_evaluation_time(next_draw_time)
-        now = datetime.now(TIMEZONE)
-        
-        # Calculate time until evaluation
-        time_to_evaluate = (evaluation_time - now).total_seconds()
-        
-        # Transition to PREPARING_TO_EVALUATE if less than 10 seconds to draw
-        if time_to_evaluate <= 10:
-            self._log_status("Preparing to evaluate draw")
-            self.state = PredictionState.PREPARING_TO_EVALUATE
-            return
+            for file_path in required_files:
+                if not os.path.exists(file_path):
+                    validation_results['files_exist'] = False
+                    validation_results['issues'].append(f"Missing file: {file_path}")
             
-        # Otherwise, display waiting status
-        time_to_next_draw = (next_draw_time - now).total_seconds()
-        if time_to_next_draw > 60:  # If more than a minute
-            self._log_status(f"Waiting {int(time_to_next_draw/60)} minutes {int(time_to_next_draw%60)} seconds until next draw")
-        else:
-            self._log_status(f"Waiting {int(time_to_next_draw)} seconds until next draw")
-        
-        # Sleep longer during waiting to reduce log spam
-        time.sleep(11)
+            # Validate predictor state
+            predictor = LotteryPredictor()
+            is_valid, message = predictor.validate_model_state()
+            
+            if not is_valid:
+                validation_results['models_ready'] = False
+                validation_results['issues'].append(f"Model validation failed: {message}")
+            
+            return OperationResult(True, validation_results)
+            
+        except Exception as e:
+            self.logger.error(f"Validation failed: {str(e)}")
+            return OperationResult(False, error=str(e))
+
+if __name__ == "__main__":
+    # Test operations
+    ops = Operations()
     
-    def _handle_preparing_to_evaluate_state(self):
-        """Handle the preparing to evaluate state operations and transitions."""
-        self._log_status("Preparing for evaluation")
-        time.sleep(11)  # Wait for 10 seconds to ensure the draw has occurred
-        self.state = PredictionState.EVALUATING
+    print("\nTesting operations...")
     
-    def _handle_evaluating_state(self):
-        """Handle the evaluating state operations and transitions."""
-        self._log_status("Evaluating predictions...")
-        success, message = self.evaluate_prediction()
+    # Test fetch
+    fetch_result = ops.fetch_latest_draws()
+    print(f"\nFetch success: {fetch_result.success}")
+    if fetch_result.success:
+        # Test analysis
+        analysis_result = ops.analyze_draws(fetch_result.data)
+        print(f"Analysis success: {analysis_result.success}")
         
-        if success:
-            self._log_status("Evaluation complete")
-            self.last_success = datetime.now(TIMEZONE)
-            self.consecutive_failures = 0
-        else:
-            self._handle_failure("evaluation", str(message))
-            # Evaluation failures don't stop the cycle
+        # Test prediction
+        prediction_result = ops.generate_prediction()
+        print(f"Prediction success: {prediction_result.success}")
         
-        # Always transition back to FETCHING to start the cycle again
-        self.state = PredictionState.FETCHING
+        # Test evaluation
+        eval_result = ops.evaluate_predictions()
+        print(f"Evaluation success: {eval_result.success}")
+    
+    # Get metrics
+    metrics = ops.get_operation_metrics()
+    print("\nOperation metrics:", metrics)
