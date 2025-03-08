@@ -22,6 +22,8 @@ class DrawScheduler:
         self.timezone = pytz.timezone('Europe/Bucharest')  # UTC+2 timezone
         # Track the last evaluated draw time
         self.last_evaluated_draw = None
+        # Track the current draw cycle we're working with
+        self.current_draw_time = None
     
     def get_next_draw_time(self, reference_time=None):
         """
@@ -68,6 +70,27 @@ class DrawScheduler:
         """
         return draw_time + timedelta(seconds=self.post_draw_wait_seconds)
     
+    def set_current_draw(self, draw_time):
+        """
+        Set the current draw time we're processing.
+        Used by the state machine to track which draw is being processed.
+        
+        Args:
+            draw_time: The draw time being processed
+        """
+        self.current_draw_time = draw_time
+    
+    def get_current_draw(self):
+        """
+        Get the current draw time being processed.
+        
+        Returns:
+            datetime: Current draw time being processed or next draw time if none set
+        """
+        if self.current_draw_time is None:
+            return self.get_next_draw_time()
+        return self.current_draw_time
+    
     def should_start_new_cycle(self, current_time=None):
         """
         Determine if it's time to start a new prediction cycle.
@@ -106,6 +129,44 @@ class DrawScheduler:
         
         next_draw = self.get_next_draw_time(current_time)
         return next_draw - current_time
+    
+    def get_time_until_evaluation(self, current_time=None):
+        """
+        Calculate time remaining until next evaluation.
+        
+        Args:
+            current_time: Optional current time reference
+            
+        Returns:
+            timedelta: Time remaining until evaluation
+        """
+        if current_time is None:
+            current_time = datetime.now(self.timezone)
+        
+        next_draw = self.get_next_draw_time(current_time)
+        eval_time = self.get_evaluation_time(next_draw)
+        return eval_time - current_time
+    
+    def is_evaluation_time(self, current_time=None, tolerance_seconds=2):
+        """
+        Check if it's time to evaluate (with tolerance).
+        
+        Args:
+            current_time: Optional current time reference
+            tolerance_seconds: Seconds of tolerance for timing check
+            
+        Returns:
+            bool: True if it's time to evaluate, False otherwise
+        """
+        if current_time is None:
+            current_time = datetime.now(self.timezone)
+        
+        next_draw = self.get_next_draw_time()
+        eval_time = self.get_evaluation_time(next_draw)
+        
+        # Check if we're within tolerance of evaluation time
+        time_diff = (current_time - eval_time).total_seconds()
+        return abs(time_diff) <= tolerance_seconds
     
     def get_formatted_time_remaining(self, current_time=None):
         """

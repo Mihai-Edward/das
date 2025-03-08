@@ -1,4 +1,3 @@
-# File: automation/diagnose_paths.py
 import os
 import sys
 import importlib

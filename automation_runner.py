@@ -18,7 +18,7 @@ if src_dir not in sys.path:
 
 # Now try the imports
 try:
-    from automation.cycle_manager import PredictionCycleManager
+    from automation.cycle_manager import PredictionCycleManager, PredictionState
     from automation.scheduler import DrawScheduler
     from automation.operations import test_operation
     from config.paths import ensure_directories
@@ -114,11 +114,18 @@ def setup_parser():
         help='Run model debugging mode'
     )
 
-    # New argument for continuous learning
+    # New arguments for state machine control
     parser.add_argument(
         '--enable-learning',
         action='store_true',
         help='Enable continuous learning to improve model based on past predictions'
+    )
+    
+    parser.add_argument(
+        '--initial-state',
+        choices=['fetching', 'analyzing', 'predicting', 'learning', 'waiting', 'evaluating'],
+        default='fetching',
+        help='Set the initial state of the prediction cycle (for testing purposes)'
     )
     
     return parser
@@ -256,11 +263,58 @@ def debug_models():
         import traceback
         traceback.print_exc()
 
+def debug_state_machine():
+    """Debug state machine transitions and timings."""
+    try:
+        print("\n===== STATE MACHINE DEBUG MODE =====")
+        
+        # Create cycle manager for testing
+        manager = PredictionCycleManager()
+        
+        # Test state transitions
+        print("\nTesting state transitions:")
+        initial_state = manager.state
+        print(f"Initial state: {initial_state.value}")
+        
+        # Test each state handler method manually
+        print("\nTesting FETCHING state handler:")
+        manager.state = PredictionState.FETCHING
+        manager._handle_fetching_state()
+        print(f"After fetching handler, state is: {manager.state.value}")
+        
+        print("\nTesting ANALYZING state handler:")
+        manager.state = PredictionState.ANALYZING
+        manager._handle_analyzing_state()
+        print(f"After analyzing handler, state is: {manager.state.value}")
+        
+        print("\nTesting PREDICTING state handler:")
+        manager.state = PredictionState.PREDICTING
+        manager._handle_predicting_state()
+        print(f"After predicting handler, state is: {manager.state.value}")
+        
+        print("\nTesting WAITING state handler:")
+        manager.state = PredictionState.WAITING
+        # We'll just check the logic, not actually execute the waiting
+        print(f"Waiting state handler would wait until {manager.scheduler.get_evaluation_time(manager.scheduler.get_next_draw_time()).strftime('%H:%M:%S')}")
+        
+        print("\nTesting scheduler methods:")
+        next_draw = manager.scheduler.get_next_draw_time()
+        evaluation_time = manager.scheduler.get_evaluation_time(next_draw)
+        print(f"Next draw time: {next_draw.strftime('%H:%M:%S')}")
+        print(f"Next evaluation time: {evaluation_time.strftime('%H:%M:%S')}")
+        
+        print("\n===== END STATE MACHINE DEBUG =====")
+        
+    except Exception as e:
+        print(f"\nError in debug_state_machine: {e}")
+        import traceback
+        traceback.print_exc()
+
 def run_automation(args):
     """Run the main automation cycle with provided arguments."""
     display_header()
     
-    # Check debug mode first
+    # Check debug modes first
     if args.debug_models:
         debug_models()
         return
@@ -277,13 +331,10 @@ def run_automation(args):
             if not ensure_models_trained():
                 print("Warning: Model check/training failed, but continuing test...")
             
-            manager = PredictionCycleManager()
-            status = manager.get_status()
+            # Test state machine debug features
+            debug_state_machine()
             
-            print("\nTest successful! Components loaded correctly.")
-            print(f"Next draw calculations working: {manager.scheduler.get_next_draw_time().strftime('%H:%M:%S')}")
-            
-            # Test fetch operation
+            # Test data collection
             collector = KinoDataCollector()
             print("\nTesting data collection...")
             draws = collector.fetch_latest_draws(num_draws=1)
@@ -319,6 +370,14 @@ def run_automation(args):
         if args.enable_learning:
             print("\nContinuous learning is ENABLED")
         
+        # Set initial state if specified
+        if args.initial_state:
+            try:
+                manager.state = PredictionState(args.initial_state)
+                print(f"\nStarting with initial state: {manager.state.value}")
+            except ValueError:
+                print(f"\nWarning: Invalid initial state '{args.initial_state}'. Using default.")
+        
         # Use Europe/Bucharest timezone (UTC+2)
         current_time = datetime.now(pytz.timezone('Europe/Bucharest'))
         print(f"\nStarting automation with configuration (UTC+2 time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}):")
@@ -328,6 +387,7 @@ def run_automation(args):
         print(f"- Draw interval: {manager.scheduler.draw_interval_minutes} minutes")
         print(f"- Fetch retries: {manager.fetch_retries}")
         print(f"- Continuous learning: {'Enabled' if manager.continuous_learning_enabled else 'Disabled'}")
+        print(f"- Initial state: {manager.state.value}")
         
         print("\nStarting automation cycle...\n")
         manager.run_cycle()
