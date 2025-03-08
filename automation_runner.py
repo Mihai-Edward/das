@@ -125,7 +125,8 @@ def setup_parser():
 
 def get_formatted_time_remaining(target_time):
     """Calculate and format time remaining until target time."""
-    now = datetime.now(pytz.UTC)
+    # Use Europe/Bucharest timezone (UTC+2)
+    now = datetime.now(pytz.timezone('Europe/Bucharest'))
     if target_time <= now:
         return "0m 0s"
     
@@ -140,12 +141,13 @@ def display_header():
     print("      AUTOMATED LOTTERY PREDICTION SYSTEM")
     print("="*50)
     
-    now = datetime.now(pytz.UTC)
+    # Use Europe/Bucharest timezone (UTC+2)
+    now = datetime.now(pytz.timezone('Europe/Bucharest'))
     scheduler = DrawScheduler()
     next_draw = scheduler.get_next_draw_time(now)
     eval_time = scheduler.get_evaluation_time(next_draw)
     
-    print(f"\nCurrent time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"\nCurrent time: {now.strftime('%Y-%m-%d %H:%M:%S')} (UTC+2)")
     print(f"Next draw at: {next_draw.strftime('%H:%M:%S')}")
     print(f"Next evaluation at: {eval_time.strftime('%H:%M:%S')}")
     print(f"Time until next draw: {get_formatted_time_remaining(next_draw)}")
@@ -317,9 +319,9 @@ def run_automation(args):
         if args.enable_learning:
             print("\nContinuous learning is ENABLED")
         
-        # Add UTC time handling
-        current_utc = datetime.now(pytz.UTC)
-        print(f"\nStarting automation with configuration (UTC time: {current_utc.strftime('%Y-%m-%d %H:%M:%S')}):")
+        # Use Europe/Bucharest timezone (UTC+2)
+        current_time = datetime.now(pytz.timezone('Europe/Bucharest'))
+        print(f"\nStarting automation with configuration (UTC+2 time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}):")
         print(f"- Maximum consecutive failures: {manager.max_failures}")
         print(f"- Retry delay: {manager.retry_delay} seconds")
         print(f"- Post-draw wait: {manager.scheduler.post_draw_wait_seconds} seconds")

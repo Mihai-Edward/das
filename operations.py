@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from datetime import datetime, timedelta
+import pytz
 
 # Add project root to path if necessary
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,6 +14,9 @@ if project_root not in sys.path:
 
 # Import necessary modules
 from config.paths import PATHS, ensure_directories
+
+# Define the standard timezone to use across all operations
+TIMEZONE = pytz.timezone('Europe/Bucharest')  # UTC+2
 
 def test_operation():
     """Test operation to verify imports and configuration."""
@@ -118,7 +122,9 @@ def generate_prediction_operation(for_draw_time=None):
             
             # Format draw time for logging
             if for_draw_time:
-                print(f"[Automation] For draw at: {for_draw_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+                # Format time in UTC+2
+                time_str = for_draw_time.astimezone(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
+                print(f"[Automation] For draw at: {time_str} (UTC+2)")
                 
             return True, {"predictions": predictions, "probabilities": probabilities, "analysis": analysis}
         else:

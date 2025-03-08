@@ -18,7 +18,8 @@ class DrawScheduler:
         """
         self.draw_interval_minutes = draw_interval_minutes
         self.post_draw_wait_seconds = post_draw_wait_seconds
-        self.timezone = pytz.UTC
+        # Change from UTC to UTC+2
+        self.timezone = pytz.timezone('Europe/Bucharest')  # UTC+2 timezone
         # Track the last evaluated draw time
         self.last_evaluated_draw = None
     
@@ -142,7 +143,8 @@ def get_next_draw_time(reference_time=None):
 
 def get_seconds_until(target_time):
     """Convenience function to get seconds until a target time."""
-    now = datetime.now(pytz.UTC)
+    # Use Europe/Bucharest timezone (UTC+2)
+    now = datetime.now(pytz.timezone('Europe/Bucharest'))
     if target_time <= now:
         return 0
         
@@ -152,12 +154,13 @@ def get_seconds_until(target_time):
 if __name__ == "__main__":
     # Test the scheduler
     scheduler = DrawScheduler()
-    now = datetime.now(pytz.UTC)
+    # Use Europe/Bucharest timezone (UTC+2)
+    now = datetime.now(scheduler.timezone)
     
     next_draw = scheduler.get_next_draw_time()
     evaluation_time = scheduler.get_evaluation_time(next_draw)
     
-    print(f"Current time (UTC): {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Current time (UTC+2): {now.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Next draw at: {next_draw.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Evaluate at: {evaluation_time.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Time until next draw: {scheduler.get_formatted_time_remaining()}")
