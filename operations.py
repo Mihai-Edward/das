@@ -1,7 +1,5 @@
 # automation/operations.py
 
-# automation/operations.py
-
 import os
 import sys
 import time
@@ -39,7 +37,7 @@ def test_operation():
         
     return True
 
-def collect_data_operation(num_draws=10, use_cached=False):
+def collect_data_operation(num_draws=10):
     """
     Collect data from website using selenium.
     
@@ -47,7 +45,6 @@ def collect_data_operation(num_draws=10, use_cached=False):
     
     Args:
         num_draws: Number of draws to fetch
-        use_cached: Whether to use cached data if available
         
     Returns:
         tuple: (success, message_or_data)
@@ -67,7 +64,7 @@ def collect_data_operation(num_draws=10, use_cached=False):
         
         # Get latest draws
         start_time = datetime.now(TIMEZONE)
-        draws = collector.fetch_latest_draws(num_draws=num_draws, use_cached=use_cached)
+        draws = collector.fetch_latest_draws(num_draws=num_draws)
         fetch_duration = (datetime.now(TIMEZONE) - start_time).total_seconds()
         
         if not draws:
@@ -111,7 +108,7 @@ def analyze_data_operation():
         
         # Get draws from collector
         collector = KinoDataCollector()
-        draws = collector.fetch_latest_draws(num_draws=100, use_cached=True)
+        draws = collector.fetch_latest_draws(num_draws=1)
         
         if not draws:
             return False, "No draws available for analysis"
