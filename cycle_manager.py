@@ -118,88 +118,127 @@ class PredictionCycleManager:
             # as this is not a critical operation
             return False, f"Continuous learning failed: {message}"
         
-def run_cycle(self):
-    """Run the main prediction cycle."""
-    while self.active and self.consecutive_failures < self.max_failures:
-        try:
-            # Get the next draw time
-            next_draw_time = self.scheduler.get_next_draw_time()
-            evaluation_time = self.scheduler.get_evaluation_time(next_draw_time)
-            
-            # Calculate wait time
-            now = datetime.now(TIMEZONE)
-            
-            # 1. Check if we should evaluate after a draw just happened
-            if now >= evaluation_time and now < next_draw_time + timedelta(minutes=2):
-                self.status = "evaluating"
-                self._log_status(f"Evaluating draw at {next_draw_time.strftime('%H:%M:%S')}")
-                
-                # Run evaluation
-                success, message = self.evaluate_prediction()
-                if not success:
-                    self._handle_failure("evaluation", message)
-                else:
-                    self._log_status("Evaluation complete")
-                
-                # Get the next draw time after evaluation
-                next_draw_time = self.scheduler.get_next_draw_time()
-                                
-            # 2. Check if we should run the prediction cycle after the previous draw
-            elif now >= next_draw_time:
-                self.status = "predicting"
-                self._log_status(f"Starting prediction cycle for next draw")
-                
-                # A) Collect latest draw data
-                self._log_status("Collecting data...")
-                success, message = self.collect_data()
-                if not success:
-                    self._handle_failure("data_collection", message)
-                    continue
-                    
-                # B) Analyze collected data
-                self._log_status("Analyzing data...")
-                success, message = self.analyze_data()
-                if not success:
-                    self._handle_failure("analysis", message)
-                    continue
-                
-                # C) Generate prediction
-                self._log_status("Generating prediction...")
-                next_next_draw = self.scheduler.get_next_draw_time(next_draw_time)
-                success, message = self.generate_prediction(for_draw_time=next_next_draw)
-                if not success:
-                    self._handle_failure("prediction", message)
-                    continue
-                    
-                # D) Run continuous learning if enabled
-                if self.continuous_learning_enabled:
-                    self._log_status("Running continuous learning...")
-                    success, message = self.run_continuous_learning()
-                    if success:
-                        self._log_status("Continuous learning completed successfully")
-                    else:
-                        self._log_status(f"Note: Continuous learning skipped or failed: {message}")
-                
-                # Success! Record and log
-                self.last_success = now
-                self.consecutive_failures = 0
-                
-                # Wait until just after the next draw time
-                self._log_status(f"Prediction complete, waiting for next draw at {next_next_draw.strftime('%H:%M:%S')}")
-                
-            # 3. Otherwise, just wait a bit
+    def run_cycle(self):
+        """Run the main prediction cycle."""
+        # Start with data collection immediately
+        self.status = "predicting"
+        self._log_status("Starting initial prediction cycle")
+        
+        # Immediate data collection at startup
+        self._log_status("Collecting initial data...")
+        success, message = self.collect_data()
+        if not success:
+            self._handle_failure("initial_data_collection", message)
+        else:
+            # Continue with analysis
+            self._log_status("Analyzing initial data...")
+            success, message = self.analyze_data()
+            if not success:
+                self._handle_failure("initial_analysis", message)
             else:
-                self.status = "waiting"
-                time_to_next_draw = (next_draw_time - now).total_seconds()
-                
-                if time_to_next_draw > 60:  # If more than a minute to wait
-                    self._log_status(f"Waiting {int(time_to_next_draw/60)} minutes {int(time_to_next_draw%60)} seconds until next draw")
+                # Generate prediction
+                self._log_status("Generating initial prediction...")
+                next_draw_time = self.scheduler.get_next_draw_time()
+                success, message = self.generate_prediction(for_draw_time=next_draw_time)
+                if not success:
+                    self._handle_failure("initial_prediction", message)
                 else:
-                    self._log_status(f"Waiting {int(time_to_next_draw)} seconds until next draw")
+                    # Run continuous learning if enabled
+                    if self.continuous_learning_enabled:
+                        self._log_status("Running initial continuous learning...")
+                        success, message = self.run_continuous_learning()
+                        if success:
+                            self._log_status("Initial continuous learning completed successfully")
+                        else:
+                            self._log_status(f"Note: Initial continuous learning skipped or failed: {message}")
+                    
+                    # Success! Record and log
+                    self.last_success = datetime.now(TIMEZONE)
+                    self.consecutive_failures = 0
+        
+        # Main cycle loop
+        while self.active and self.consecutive_failures < self.max_failures:
+            try:
+                # Get the next draw time
+                next_draw_time = self.scheduler.get_next_draw_time()
+                evaluation_time = self.scheduler.get_evaluation_time(next_draw_time)
                 
-            # Sleep for a bit before checking again  
-            time.sleep(10)  # Check every 10 seconds instead of 30
-            
-        except Exception as e:
-            self._handle_failure("cycle", str(e))
-            time.sleep(self.retry_delay)
+                # Calculate wait time
+                now = datetime.now(TIMEZONE)
+                
+                # Debug logging
+                self._log_status(f"Debug: now = {now.strftime('%H:%M:%S')}, next_draw = {next_draw_time.strftime('%H:%M:%S')}, eval = {evaluation_time.strftime('%H:%M:%S')}")
+                
+                # 1. Check if we should evaluate after a draw just happened (with 2-second tolerance)
+                if now >= evaluation_time - timedelta(seconds=2) and now < next_draw_time + timedelta(minutes=2):
+                    self.status = "evaluating"
+                    self._log_status(f"Evaluating draw at {next_draw_time.strftime('%H:%M:%S')}")
+                    
+                    # Run evaluation
+                    success, message = self.evaluate_prediction()
+                    if not success:
+                        self._handle_failure("evaluation", message)
+                    else:
+                        self._log_status("Evaluation complete")
+                    
+                    # Get the next draw time after evaluation
+                    next_draw_time = self.scheduler.get_next_draw_time()
+                    
+                    # After evaluation, immediately collect data for the next prediction
+                    self.status = "predicting"
+                    self._log_status("Starting prediction cycle for next draw")
+                    
+                    # A) Collect latest draw data
+                    self._log_status("Collecting data...")
+                    success, message = self.collect_data()
+                    if not success:
+                        self._handle_failure("data_collection", message)
+                        continue
+                        
+                    # B) Analyze collected data
+                    self._log_status("Analyzing data...")
+                    success, message = self.analyze_data()
+                    if not success:
+                        self._handle_failure("analysis", message)
+                        continue
+                
+                    # C) Generate prediction
+                    self._log_status("Generating prediction...")
+                    next_next_draw = self.scheduler.get_next_draw_time(next_draw_time)
+                    success, message = self.generate_prediction(for_draw_time=next_next_draw)
+                    if not success:
+                        self._handle_failure("prediction", message)
+                        continue
+                        
+                    # D) Run continuous learning if enabled
+                    if self.continuous_learning_enabled:
+                        self._log_status("Running continuous learning...")
+                        success, message = self.run_continuous_learning()
+                        if success:
+                            self._log_status("Continuous learning completed successfully")
+                        else:
+                            self._log_status(f"Note: Continuous learning skipped or failed: {message}")
+                    
+                    # Success! Record and log
+                    self.last_success = now
+                    self.consecutive_failures = 0
+                    
+                    # Wait until just after the next draw time
+                    self._log_status(f"Prediction complete, waiting for next draw at {next_next_draw.strftime('%H:%M:%S')}")
+                                        
+                # 3. Otherwise, just wait a bit
+                else:
+                    self.status = "waiting"
+                    time_to_next_draw = (next_draw_time - now).total_seconds()
+                    
+                    if time_to_next_draw > 60:  # If more than a minute to wait
+                        self._log_status(f"Waiting {int(time_to_next_draw/60)} minutes {int(time_to_next_draw%60)} seconds until next draw")
+                    else:
+                        self._log_status(f"Waiting {int(time_to_next_draw)} seconds until next draw")
+                
+                # Sleep for a bit before checking again  
+                time.sleep(10)  # Check every 10 seconds instead of 30
+                
+            except Exception as e:
+                self._handle_failure("cycle", str(e))
+                time.sleep(self.retry_delay)
