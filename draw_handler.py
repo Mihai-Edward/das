@@ -188,6 +188,23 @@ class DrawHandler:
             print(f"Error loading historical data: {e}")
             return None
 
+    def load_analysis_data(self):
+        """Load and process analysis data"""
+        try:
+            analysis = DataAnalysis(self._load_historical_data())
+            analysis_results = {
+                'frequency': analysis.get_top_numbers(20),
+                'suggested_numbers': analysis.suggest_numbers(),
+                'common_pairs': analysis.find_common_pairs(),
+                'consecutive_numbers': analysis.find_consecutive_numbers(),
+                'range_analysis': analysis.number_range_analysis(),
+                'hot_cold_numbers': analysis.hot_and_cold_numbers()
+            }
+            return analysis_results
+        except Exception as e:
+            print(f"Error loading analysis data: {e}")
+            return None
+
     def _prepare_pipeline_data(self, data):
         """Prepare data for prediction pipeline"""
         try:
