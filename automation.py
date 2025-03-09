@@ -1,10 +1,3 @@
-"""
-Lottery Automation System
-Author: Mihai-Edward
-Last Updated: 2025-03-08 12:28:48 UTC
-Description: Automated system for lottery prediction with timezone handling and task management
-"""
-
 import asyncio
 import os
 import sys
@@ -15,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import logging
 from logging.handlers import RotatingFileHandler
 import pytz
+import pandas as pd
 
 # Import your existing components
 from draw_handler import DrawHandler
@@ -146,9 +140,9 @@ class LotteryAutomation:
             self.logger.info("Starting critical tasks execution")
 
             # 1. Fetch latest draw
-            print("\nFetching 1 latest draws...")
+            print("\nFetching  24  latest draws...")
             draws = await asyncio.get_event_loop().run_in_executor(
-                None, self.collector.fetch_latest_draws, 1
+                None, self.collector.fetch_latest_draws, 24
             )
             if not draws:
                 raise Exception("Failed to fetch latest draw")
@@ -217,7 +211,7 @@ class LotteryAutomation:
             
             # 4. ML Prediction using analyzed data
             predictions, probabilities, analysis_results = await asyncio.get_event_loop().run_in_executor(
-                None, self.handler.handle_prediction_pipeline
+                None, self._ensure_trained_model_and_predict
             )
             
             if predictions:
@@ -302,6 +296,30 @@ class LotteryAutomation:
             self.logger.error(f"Error in prediction cycle: {str(e)}")
             self._update_stats(False, 0)
             return False
+
+    def _ensure_trained_model_and_predict(self):
+        """Ensure the model is trained and generate predictions"""
+        try:
+            # Check if the model is already trained and loaded
+            if not self.handler.predictor.training_status['model_loaded']:
+                print("Training models as they are not loaded...")
+                if not self.handler.train_ml_models():
+                    raise Exception("Model training failed")
+
+            # Load analysis results
+            analysis_file = PATHS['ANALYSIS']
+            if os.path.exists(analysis_file):
+                analysis_data = pd.read_excel(analysis_file, sheet_name=None)
+                self.handler.load_analysis_data(analysis_data)
+
+            # Generate predictions
+            predictions, probabilities, analysis_results = self.handler.handle_prediction_pipeline()
+            if not predictions:
+                raise Exception("Prediction generation failed")
+            return predictions, probabilities, analysis_results
+        except Exception as e:
+            print(f"Error ensuring trained model and predicting: {e}")
+            return None, None, None
 
     def print_stats(self):
         """Print current execution statistics"""
