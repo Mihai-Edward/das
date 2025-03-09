@@ -1,7 +1,7 @@
 """
 Lottery Automation System
 Author: Mihai-Edward
-Last Updated: 2025-03-08
+Last Updated: 2025-03-08 12:28:48 UTC
 Description: Automated system for lottery prediction with timezone handling and task management
 """
 
@@ -21,6 +21,7 @@ from draw_handler import DrawHandler
 from data_collector_selenium import KinoDataCollector
 from prediction_evaluator import PredictionEvaluator
 from config.paths import PATHS, ensure_directories
+from data_analysis import DataAnalysis
 
 class TaskQueue:
     """Manages task prioritization and execution"""
@@ -73,11 +74,15 @@ class LotteryAutomation:
         print("Configuring timezone...")
         self.timezone = pytz.timezone('Europe/Bucharest')  # UTC+2
         self.utc = pytz.UTC
+        current_time = datetime.now(self.utc)
+        local_time = current_time.astimezone(self.timezone)
+        print(f"Current UTC time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        print(f"Current local time: {local_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         
         # 5. Initialize components
         print("Initializing components...")
         self.handler = DrawHandler()
-        self.collector = KinoDataCollector()
+        self.collector = KinoDataCollector(user_login="Mihai-Edward")
         self.evaluator = PredictionEvaluator()
         
         # 6. Initialize task management
@@ -91,7 +96,8 @@ class LotteryAutomation:
             'successful_cycles': 0,
             'failed_cycles': 0,
             'average_execution_time': 0,
-            'last_critical_execution_time': 0
+            'last_critical_execution_time': 0,
+            'last_analysis_time': None
         }
         
         print("Initialization complete!")
@@ -134,7 +140,7 @@ class LotteryAutomation:
         return timedelta(minutes=minutes_to_next - 1, seconds=50)
 
     async def _execute_critical_tasks(self):
-        """Execute time-critical tasks in the correct sequence"""
+        """Execute time-critical tasks with complete analysis sequence"""
         try:
             start_time = self.get_local_time()
             self.logger.info("Starting critical tasks execution")
@@ -146,37 +152,84 @@ class LotteryAutomation:
             )
             if not draws:
                 raise Exception("Failed to fetch latest draw")
-        
-            # 2. Save draw immediately
+            
+            # 2. Validate and save draw
             if draws[0]:
-                await asyncio.get_event_loop().run_in_executor(
-                    None, self.handler.save_draw_to_csv, draws[0][0], draws[0][1]
-                )
-                print("\nSuccessfully collected 1 draws")
-        
-            # 3. Complete Analysis & Save (Option 8)
-            await asyncio.get_event_loop().run_in_executor(
-                None, self.handler.perform_complete_analysis, draws
-            )
-        
-            # 4. Get ML prediction (Option 9)
-            predictions, probabilities, analysis = await asyncio.get_event_loop().run_in_executor(
+                # First validate the draw data
+                if await asyncio.get_event_loop().run_in_executor(
+                    None, self.collector.validate_draw_data, draws[0][1]
+                ):
+                    # Then save the draw
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, self.collector.save_draw, draws[0][0], draws[0][1]
+                    )
+                    print("\nSuccessfully collected 1 draws")
+                    
+                    # Sort historical draws
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, self.collector.sort_historical_draws
+                    )
+
+            # 3. Complete Analysis Sequence
+            print("\nStarting comprehensive data analysis...")
+            try:
+                # Create DataAnalysis instance
+                analysis = DataAnalysis(draws)
+                
+                # 3.1 Frequency Analysis
+                print("Performing frequency analysis...")
+                frequency = analysis.count_frequency()
+                top_numbers = analysis.get_top_numbers(20)
+                print(f"Top 20 numbers: {', '.join(map(str, top_numbers))}")
+                
+                # 3.2 Pattern Analysis
+                print("Analyzing number patterns...")
+                common_pairs = analysis.find_common_pairs()
+                consecutive_pairs = analysis.find_consecutive_numbers()
+                sequence_patterns = analysis.sequence_pattern_analysis()
+                
+                # 3.3 Range Analysis
+                print("Analyzing number ranges...")
+                range_distribution = analysis.number_range_analysis()
+                
+                # 3.4 Hot and Cold Numbers
+                print("Identifying hot and cold numbers...")
+                hot_numbers, cold_numbers = analysis.hot_and_cold_numbers()
+                print(f"Hot numbers: {[num for num, _ in hot_numbers[:5]]}")
+                print(f"Cold numbers: {[num for num, _ in cold_numbers[:5]]}")
+                
+                # 3.5 Cluster Analysis
+                print("Performing cluster analysis...")
+                clusters = analysis.cluster_analysis()
+                
+                # 3.6 Save All Analysis Results
+                print("Saving complete analysis results...")
+                save_success = analysis.save_to_excel()
+                if not save_success:
+                    raise Exception("Failed to save analysis results")
+                
+                print("Complete analysis finished and saved successfully")
+                self.execution_stats['last_analysis_time'] = self.get_local_time()
+                
+            except Exception as e:
+                print(f"Error during analysis: {e}")
+                raise
+            
+            # 4. ML Prediction using analyzed data
+            predictions, probabilities, analysis_results = await asyncio.get_event_loop().run_in_executor(
                 None, self.handler.handle_prediction_pipeline
             )
-        
+            
             if predictions:
                 next_draw_time = self.get_local_time() + timedelta(minutes=5)
                 await asyncio.get_event_loop().run_in_executor(
                     None, self.handler.save_predictions_to_csv,
                     predictions, probabilities, next_draw_time.strftime('%Y-%m-%d %H:%M:%S')
                 )
+                print(f"\nPredicted numbers: {sorted(predictions)}")
             
-            # 5. Evaluate prediction accuracy (Option 10)
-            await asyncio.get_event_loop().run_in_executor(
-                None, self.evaluator.evaluate_past_predictions
-            )
-        
-            # 6. Run continuous learning cycle (Option 12)
+            # 5. Run continuous learning cycle
+            print("\nStarting continuous learning cycle...")
             await asyncio.get_event_loop().run_in_executor(
                 None, self.handler.run_continuous_learning_cycle
             )
@@ -184,22 +237,20 @@ class LotteryAutomation:
             execution_time = (self.get_local_time() - start_time).total_seconds()
             self.execution_stats['last_critical_execution_time'] = execution_time
             self.logger.info(f"Critical tasks completed in {execution_time:.2f} seconds")
-        
+            
             return True, draws
 
         except Exception as e:
             self.logger.error(f"Error in critical tasks: {str(e)}")
             return False, None
-    
+
     async def _execute_background_tasks(self, draws):
         """Execute non-time-critical background tasks"""
         try:
             self.logger.info("Starting background tasks")
             
             tasks = [
-                self.thread_pool.submit(self.handler.perform_complete_analysis, draws),
-                self.thread_pool.submit(self.evaluator.evaluate_past_predictions),
-                self.thread_pool.submit(self.handler.run_continuous_learning_cycle)
+                self.thread_pool.submit(self.evaluator.evaluate_past_predictions)
             ]
             
             for future in tasks:
@@ -260,6 +311,8 @@ class LotteryAutomation:
         print(f"Failed cycles: {self.execution_stats['failed_cycles']}")
         print(f"Average execution time: {self.execution_stats['average_execution_time']:.2f}s")
         print(f"Last critical execution time: {self.execution_stats['last_critical_execution_time']:.2f}s")
+        if self.execution_stats['last_analysis_time']:
+            print(f"Last analysis time: {self.execution_stats['last_analysis_time'].strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
     async def run(self):
         """Main automation loop"""
