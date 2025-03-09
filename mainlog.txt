@@ -1,0 +1,821 @@
+(venv) PS C:\Users\Mihai-Eduard\Desktop\Versiune1.4> & "C:/Program Files/Python313/python.exe" c:/Users/Mihai-Eduard/Desktop/Versiune1.4/src/main.py
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src       
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed   
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data        
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+
+System initialized at 2025-03-09 17:25:06.383181
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+
+Initialized LotteryPredictor:
+- Number range: (1, 80)
+- Numbers to draw: 20
+- Number of classes: 80
+Loaded learning history: 29 learning cycles completed
+
+==========================
+3. Fetch latest draws from lotostats.ro
+8. Complete Analysis & Save
+9. Get ML prediction
+10. Evaluate prediction accuracy
+11. Run pipeline test
+12. Run continuous learning cycle
+13. Exit
+==========================
+
+Choose an option (3,8-13): 3
+
+--- Running Data Collector in Standalone Mode ---
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+
+Sorting historical draws...
+Successfully sorted 1261 draws from newest to oldest
+
+Fetching 24 latest draws...
+
+DevTools listening on ws://127.0.0.1:61360/devtools/browser/83471790-e25f-4131-9b4b-fb5e86514b69
+[11368:3540:0309/172511.032:ERROR:edge_auth_errors.cc(531)] EDGE_IDENTITY: Get Default OS Account failed: Error: Primary Error: kImplicitSignInFailure, Secondary Error: kAccountProviderFetchError, Platform error: 0, Error string:
+
+Browser initialized
+[6568:10116:0309/172511.986:ERROR:gles2_cmd_decoder_passthrough.cc(1083)] [GroupMarkerNotSet(crbug.com/242999)!:A040200064160000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader flag to opt in to lower security guarantees for trusted content.
+[11368:3540:0309/172512.946:ERROR:fallback_task_provider.cc(126)] Every renderer should have at least one task provided by a primary task provider. If a "Renderer" fallback task is shown, it is a bug. If you have repro steps, please file a new bug and tag it as a dependency of crbug.com/739782.
+[11368:3540:0309/172512.996:ERROR:fallback_task_provider.cc(126)] Every renderer should have at least one task provided by a primary task provider. If a "Renderer" fallback task is shown, it is a bug. If you have repro steps, please file a new bug and tag it as a dependency of crbug.com/739782.
+Page loaded
+Results table found
+[4948:2820:0309/172530.100:ERROR:ssl_client_socket_impl.cc(891)] handshake failed; returned -1, SSL error code 1, net_error -100
+[4948:2820:0309/172530.210:ERROR:ssl_client_socket_impl.cc(891)] handshake failed; returned -1, SSL error code 1, net_error -100
+[4948:2820:0309/172531.448:ERROR:ssl_client_socket_impl.cc(891)] handshake failed; returned -1, SSL error code 1, net_error -101
+Found 100 rows in the results table
+Draw 17:15  09-03-2025 already exists in history
+Draw 17:10  09-03-2025 already exists in history
+Draw 17:05  09-03-2025 already exists in history
+[4948:2820:0309/172539.405:ERROR:ssl_client_socket_impl.cc(891)] handshake failed; returned -1, SSL error code 1, net_error -101
+Draw 17:00  09-03-2025 already exists in history
+Draw 16:55  09-03-2025 already exists in history
+Draw 16:50  09-03-2025 already exists in history
+Draw 16:45  09-03-2025 already exists in history
+Draw 16:40  09-03-2025 already exists in history
+Draw 16:35  09-03-2025 already exists in history
+Draw 16:30  09-03-2025 already exists in history
+Draw 16:25  09-03-2025 already exists in history
+Draw 16:20  09-03-2025 already exists in history
+Draw 16:15  09-03-2025 already exists in history
+Draw 16:10  09-03-2025 already exists in history
+Draw 16:05  09-03-2025 already exists in history
+Draw 16:00  09-03-2025 already exists in history
+Draw 15:55  09-03-2025 already exists in history
+Draw 15:50  09-03-2025 already exists in history
+Draw 15:45  09-03-2025 already exists in history
+Draw 15:40  09-03-2025 already exists in history
+Draw 15:35  09-03-2025 already exists in history
+Draw 15:30  09-03-2025 already exists in history
+Draw 15:25  09-03-2025 already exists in history
+
+Successfully collected 24 draws
+
+Collected draws:
+Date: 17:20  09-03-2025, Numbers: 5, 9, 10, 12, 19, 20, 21, 23, 25, 26, 30, 31, 34, 37, 52, 55, 57, 67, 70, 71
+Date: 17:15  09-03-2025, Numbers: 6, 9, 14, 16, 21, 28, 31, 32, 37, 42, 43, 44, 53, 54, 58, 69, 72, 75, 76, 77
+Date: 17:10  09-03-2025, Numbers: 2, 22, 25, 26, 30, 39, 40, 47, 48, 53, 58, 60, 61, 66, 67, 68, 71, 73, 74, 76
+Date: 17:05  09-03-2025, Numbers: 3, 4, 6, 8, 11, 12, 14, 18, 20, 26, 27, 28, 31, 38, 49, 50, 54, 57, 64, 77
+Date: 17:00  09-03-2025, Numbers: 5, 6, 14, 16, 19, 21, 22, 29, 30, 35, 37, 38, 41, 48, 52, 57, 60, 73, 74, 76
+Date: 16:55  09-03-2025, Numbers: 3, 4, 8, 12, 13, 14, 15, 17, 43, 45, 47, 53, 55, 56, 58, 64, 68, 70, 72, 74
+Date: 16:50  09-03-2025, Numbers: 6, 8, 12, 18, 26, 28, 30, 33, 35, 37, 43, 45, 46, 49, 54, 56, 60, 65, 73, 77
+Date: 16:45  09-03-2025, Numbers: 3, 4, 7, 16, 17, 27, 30, 33, 34, 42, 46, 47, 58, 60, 62, 63, 64, 65, 72, 76
+Date: 16:40  09-03-2025, Numbers: 3, 6, 21, 22, 23, 29, 35, 37, 39, 42, 45, 46, 50, 54, 65, 66, 69, 71, 76, 77
+Date: 16:35  09-03-2025, Numbers: 2, 5, 6, 13, 14, 24, 25, 26, 28, 37, 49, 53, 61, 65, 67, 68, 70, 73, 74, 80
+Date: 16:30  09-03-2025, Numbers: 3, 8, 12, 13, 14, 16, 17, 19, 21, 26, 31, 32, 33, 37, 45, 46, 48, 52, 62, 66
+Date: 16:25  09-03-2025, Numbers: 9, 11, 15, 19, 27, 30, 33, 37, 39, 46, 49, 51, 52, 53, 55, 62, 66, 68, 77, 78
+Date: 16:20  09-03-2025, Numbers: 1, 12, 13, 19, 24, 32, 36, 41, 43, 47, 51, 54, 58, 59, 60, 62, 66, 70, 76, 79
+Date: 16:15  09-03-2025, Numbers: 1, 3, 4, 5, 7, 12, 17, 19, 23, 27, 30, 34, 39, 48, 51, 52, 54, 62, 65, 79
+Date: 16:10  09-03-2025, Numbers: 20, 21, 23, 25, 27, 33, 38, 44, 48, 50, 54, 63, 64, 65, 68, 70, 72, 76, 78, 80
+Date: 16:05  09-03-2025, Numbers: 7, 8, 9, 10, 15, 17, 20, 30, 31, 32, 34, 39, 40, 43, 52, 60, 73, 74, 76, 80
+Date: 16:00  09-03-2025, Numbers: 3, 6, 12, 24, 28, 32, 36, 40, 43, 45, 47, 50, 52, 62, 64, 65, 66, 67, 68, 74
+Date: 15:55  09-03-2025, Numbers: 3, 9, 12, 13, 14, 15, 18, 24, 26, 27, 33, 34, 45, 53, 56, 57, 63, 73, 74, 76
+Date: 15:50  09-03-2025, Numbers: 9, 11, 12, 13, 14, 21, 24, 25, 35, 42, 43, 56, 57, 60, 61, 62, 67, 74, 79, 80
+Date: 15:45  09-03-2025, Numbers: 6, 9, 14, 23, 29, 31, 32, 41, 45, 47, 49, 50, 55, 61, 67, 70, 72, 75, 76, 80
+Date: 15:40  09-03-2025, Numbers: 1, 4, 6, 9, 12, 13, 14, 15, 29, 30, 40, 41, 49, 60, 61, 66, 69, 70, 78, 80
+Date: 15:35  09-03-2025, Numbers: 1, 5, 7, 9, 11, 14, 15, 16, 17, 25, 26, 27, 45, 56, 57, 58, 63, 68, 69, 73
+Date: 15:30  09-03-2025, Numbers: 1, 6, 12, 16, 17, 19, 22, 23, 26, 30, 32, 33, 34, 37, 38, 59, 61, 68, 77, 79
+Date: 15:25  09-03-2025, Numbers: 1, 11, 27, 29, 34, 36, 40, 41, 48, 51, 58, 59, 61, 63, 64, 67, 72, 76, 79, 80
+
+Sorting updated historical draws...
+Successfully sorted 1262 draws from newest to oldest
+Historical draws successfully sorted from newest to oldest
+
+Collection Status: {'success': True, 'draws_collected': 24, 'last_error': None, 'last_successful_draw': '15:25  09-03-2025'}
+
+--- Data Collection Complete ---
+
+==========================
+3. Fetch latest draws from lotostats.ro
+8. Complete Analysis & Save
+9. Get ML prediction
+10. Evaluate prediction accuracy
+11. Run pipeline test
+12. Run continuous learning cycle
+13. Exit
+==========================
+
+Choose an option (3,8-13): 8
+
+Complete analysis saved to: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\analysis_results.xlsx
+
+Complete analysis performed and saved successfully
+
+==========================
+3. Fetch latest draws from lotostats.ro
+8. Complete Analysis & Save
+9. Get ML prediction
+10. Evaluate prediction accuracy
+11. Run pipeline test
+12. Run continuous learning cycle
+13. Exit
+==========================
+
+Choose an option (3,8-13): 9
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+
+Initialized LotteryPredictor:
+- Number range: (1, 80)
+- Numbers to draw: 20
+- Number of classes: 80
+Loaded learning history: 29 learning cycles completed
+✓ Model found: lottery_predictor_adjusted_20250309_171203
+
+Generating ML prediction for next draw...
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+
+Initialized LotteryPredictor:
+- Number range: (1, 80)
+- Numbers to draw: 20
+- Number of classes: 80
+Loaded learning history: 29 learning cycles completed
+Checking/Training models...
+Loaded 1262 draws for training
+
+Preparing training data...
+
+Processing 1257 potential training samples...
+Processed 100 valid samples...
+Processed 200 valid samples...
+Processed 300 valid samples...
+Processed 400 valid samples...
+Processed 500 valid samples...
+Processed 600 valid samples...
+Processed 700 valid samples...
+Processed 800 valid samples...
+Processed 900 valid samples...
+Processed 1000 valid samples...
+Processed 1100 valid samples...
+Processed 1200 valid samples...
+
+Data Preparation Summary:
+- Total potential samples: 1257
+- Valid samples generated: 1257
+- Feature shape: (1257, 84)
+- Labels shape: (1257, 20)
+- Feature stats: min=0.0000, max=51.9000, mean=1.2918
+
+Label Statistics:
+- Unique first numbers: 18/80
+- Numbers distribution range: 1-80
+Prepared features shape: (1257, 84)
+
+Starting model training...
+
+Processing real samples...
+
+Processed 1257 valid samples out of 1257 total samples
+Number of unique classes before synthetic: 18
+
+Missing classes detection:
+- Total classes: 80
+- Classes present: 18
+- Missing classes: 62
+- Missing class indices: [16 18 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41
+ 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65
+ 66 67 68 69 70 71 72 73 74 75 76 77 78 79]
+
+Adding synthetic samples for 65 classes (missing + underrepresented)
+
+Generating synthetic samples...
+Generated samples for 10/65 classes
+Generated samples for 20/65 classes
+Generated samples for 30/65 classes
+Generated samples for 40/65 classes
+Generated samples for 50/65 classes
+Generated samples for 60/65 classes
+Generated samples for 65/65 classes
+
+After synthetic data generation:
+- Total samples: 1582
+- Feature shape: (1582, 84)
+- Unique classes: 80
+- Class distribution: [321 232 175 154  98  55  75  46  26  34  10   7   5   9   6   5   5   6
+   5   8   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5
+   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5
+   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5   5
+   5   5   5   5   5   5   5   5]
+
+Splitting data for training...
+Scaling features...
+
+Training probabilistic model...
+
+Training pattern model...
+
+Model Training Results:
+- Total samples: 1582
+- Valid samples: 1257
+- Synthetic samples: 325
+- Training samples: 1265
+- Test samples: 317
+- Features: 84
+- Classes represented: 80
+- Probabilistic Model Score: 0.1514
+- Pattern Model Score: 0.9910
+Model state validation successful
+Saved model: lottery_predictor_20250309_172630_prob_model.pkl
+Saved model: lottery_predictor_20250309_172630_pattern_model.pkl
+Saved model: lottery_predictor_20250309_172630_scaler.pkl
+Models saved successfully in c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Models trained and saved successfully
+Models ready
+
+Generating predictions...
+✓ Model found: lottery_predictor_20250309_172630
+Loading models from: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models\lottery_predictor_20250309_172630
+Models loaded successfully
+
+Executing pipeline stage: data_preparation
+
+Preparing data for prediction pipeline...
+Data cleaning completed successfully
+Data preparation completed successfully
+Stage data_preparation completed in 0.03 seconds
+
+Executing pipeline stage: feature_engineering
+
+Generating enhanced features...
+
+Generating analysis features...
+Generated 160 analysis features
+Feature range: 0.0000 to 1.0000
+Base features shape: (84,)
+Analysis features shape: (160,)
+Using feature vector of shape: (84,)
+Feature statistics:
+  mean: 1.3526
+  std: 5.8484
+  min: 0.0000
+  max: 45.2400
+Stage feature_engineering completed in 0.01 seconds
+
+Executing pipeline stage: model_prediction
+
+Generating model predictions...
+Scaling features...
+Getting probabilistic model predictions...
+Getting pattern model predictions...
+
+Prediction Statistics:
+Probabilistic Model:
+- Min: 0.0000
+- Max: 0.7956
+- Mean: 0.0125
+- Confidence: 0.9107
+
+Pattern Model:
+- Min: 0.0079
+- Max: 0.0177
+- Mean: 0.0125
+- Confidence: 0.9972
+Stage model_prediction completed in 0.01 seconds
+
+Executing pipeline stage: post_processing
+
+Post-processing predictions...
+
+Prediction Summary:
+Final Numbers: [1, 2, 3, 6, 8, 9, 10, 11, 13, 15, 21, 29, 35, 37, 48, 53, 61, 68, 69, 74]
+Average Confidence: 0.0292
+Stage post_processing completed in 0.00 seconds
+
+Pipeline execution completed successfully
+Total execution time: 0.06 seconds
+
+Predicted numbers for next draw at 17:30 09-03-2025:
+Numbers: 1,2,3,6,8,9,10,11,13,15,21,29,35,37,48,53,61,68,69,74
+
+Probabilities for each predicted number:
+Number 1: 0.0527
+Number 2: 0.0166
+Number 3: 0.0316
+Number 6: 0.0113
+Number 8: 0.0091
+Number 9: 0.3235
+Number 10: 0.0110
+Number 11: 0.0096
+Number 13: 0.0102
+Number 15: 0.0102
+Number 21: 0.0092
+Number 29: 0.0106
+Number 35: 0.0091
+Number 37: 0.0106
+Number 48: 0.0096
+Number 53: 0.0100
+Number 61: 0.0103
+Number 68: 0.0101
+Number 69: 0.0102
+Number 74: 0.0093
+
+Prediction saved to: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\predictions.csv
+Date: 17:30 09-03-2025
+Numbers: 1,2,3,6,8,9,10,11,13,15,21,29,35,37,48,53,61,68,69,74
+Probabilities included
+
+Prediction process completed successfully!
+
+==========================
+3. Fetch latest draws from lotostats.ro
+8. Complete Analysis & Save
+9. Get ML prediction
+10. Evaluate prediction accuracy
+11. Run pipeline test
+12. Run continuous learning cycle
+13. Exit
+==========================
+
+Choose an option (3,8-13): 10
+
+Starting prediction evaluation...
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Predictions file shape: (34, 3)
+Historical draws file shape: (1262, 21)
+First row of predictions: ['14:30 06-03-2025', '2,5,6,8,10,11,13,15,16,32,39,44,48,53,56,61,68,69,74,77', '0.0117,0.0104,0.0091,0.4037,0.0085,0.0085,0.0093,0.0084,0.0088,0.0084,0.0095,0.0091,0.0089,0.0094,0.0086,0.0088,0.0091,0.0087,0.0090,0.0085']
+First row of historical draws: ['17:20  09-03-2025', np.int64(5), np.int64(9), np.int64(10), np.int64(12), np.int64(19), np.int64(20), np.int64(21), np.int64(23), np.int64(25), np.int64(26), np.int64(30), np.int64(31), np.int64(34), np.int64(37), np.int64(52), np.int64(55), np.int64(57), np.int64(67), np.int64(70), np.int64(71)]
+Converted date in first prediction row: 2025-03-06 14:30:00
+Converted date in first historical row: 2025-03-09 17:20:00
+Number of past predictions: 23
+Processing prediction row 0 with date 2025-03-06 14:30:00
+Row 0 predicted numbers: [2, 5, 6, 8, 10, 11, 13, 15, 16, 32, 39, 44, 48, 53, 56, 61, 68, 69, 74, 77]
+Row 0 actual numbers: [1, 6, 7, 9, 15, 20, 28, 30, 33, 34, 36, 43, 49, 55, 57, 58, 60, 65, 69, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 1 with date 2025-03-06 14:35:00
+Row 1 predicted numbers: [2, 5, 6, 8, 10, 11, 13, 16, 29, 32, 39, 44, 48, 53, 56, 61, 68, 69, 74, 77]
+Row 1 actual numbers: [2, 7, 12, 14, 15, 17, 19, 21, 26, 28, 30, 36, 42, 44, 48, 56, 59, 63, 65, 70]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 2 with date 2025-03-06 14:40:00
+Row 2 predicted numbers: [2, 5, 6, 8, 10, 11, 13, 15, 29, 32, 37, 39, 44, 45, 53, 56, 61, 64, 69, 77]
+Row 2 actual numbers: [2, 24, 27, 28, 33, 34, 42, 43, 45, 48, 51, 52, 54, 56, 61, 62, 70, 72, 74, 76]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 3 with date 2025-03-06 14:45:00
+Row 3 predicted numbers: [2, 5, 6, 8, 10, 11, 13, 15, 16, 29, 32, 37, 39, 44, 45, 53, 56, 61, 64, 69]
+Row 3 actual numbers: [2, 14, 15, 22, 23, 29, 35, 36, 37, 40, 42, 50, 55, 57, 59, 63, 69, 75, 76, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 4 with date 2025-03-06 14:45:00
+Row 4 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 15, 29, 33, 35, 37, 48, 53, 61, 68, 69]
+Row 4 actual numbers: [2, 14, 15, 22, 23, 29, 35, 36, 37, 40, 42, 50, 55, 57, 59, 63, 69, 75, 76, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 5 with date 2025-03-06 14:45:00
+Row 5 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 15, 29, 33, 35, 37, 48, 53, 61, 68, 69]
+Row 5 actual numbers: [2, 14, 15, 22, 23, 29, 35, 36, 37, 40, 42, 50, 55, 57, 59, 63, 69, 75, 76, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 6 with date 2025-03-06 15:00:00
+Row 6 predicted numbers: [1, 2, 3, 4, 5, 6, 11, 15, 32, 33, 35, 37, 44, 45, 56, 59, 61, 69, 71, 77]
+Row 6 actual numbers: [1, 5, 9, 10, 11, 17, 18, 22, 25, 26, 30, 37, 40, 46, 51, 52, 54, 56, 64, 67]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 7 with date 2025-03-06 15:25:00
+No matching historical draw for date 2025-03-06 15:25:00
+Processing prediction row 8 with date 2025-03-06 18:00:00
+Row 8 predicted numbers: [1, 2, 3, 6, 7, 8, 9, 10, 11, 13, 15, 29, 35, 37, 53, 57, 61, 68, 69, 74]
+Row 8 actual numbers: [1, 6, 8, 12, 16, 18, 26, 28, 40, 42, 43, 44, 48, 51, 53, 56, 57, 62, 70, 80]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 9 with date 2025-03-06 18:25:00
+Row 9 predicted numbers: [1, 2, 3, 6, 7, 8, 9, 10, 11, 13, 15, 29, 35, 37, 53, 57, 61, 68, 69, 74]
+Row 9 actual numbers: [3, 4, 7, 10, 11, 13, 14, 21, 35, 38, 42, 53, 55, 57, 61, 63, 64, 66, 71, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 10 with date 2025-03-06 18:35:00
+Row 10 predicted numbers: [1, 2, 3, 6, 7, 8, 9, 10, 11, 13, 15, 29, 33, 35, 37, 53, 61, 68, 69, 74]
+Row 10 actual numbers: [8, 12, 14, 21, 25, 31, 35, 37, 54, 55, 58, 61, 62, 64, 66, 67, 71, 76, 79, 80]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 11 with date 2025-03-06 19:00:00
+No matching historical draw for date 2025-03-06 19:00:00
+Processing prediction row 12 with date 2025-03-07 11:50:00
+Row 12 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 15, 29, 37, 48, 53, 61, 68, 69, 74]
+Row 12 actual numbers: [1, 6, 10, 13, 17, 18, 19, 23, 24, 30, 36, 45, 46, 49, 50, 55, 64, 69, 72, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 13 with date 2025-03-07 11:55:00
+Row 13 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 15, 29, 35, 37, 48, 53, 61, 68, 69]
+Row 13 actual numbers: [4, 9, 19, 20, 33, 35, 38, 39, 44, 46, 53, 54, 55, 56, 58, 59, 61, 63, 72, 79]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 14 with date 2025-03-07 14:55:00
+Row 14 predicted numbers: [1, 2, 6, 7, 8, 9, 10, 11, 13, 15, 29, 35, 37, 48, 53, 57, 61, 68, 69, 74]
+Row 14 actual numbers: [2, 6, 7, 11, 17, 20, 22, 26, 29, 32, 41, 43, 47, 53, 57, 58, 61, 64, 67, 70]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 16 with date 2025-03-07 19:15:00
+No matching historical draw for date 2025-03-07 19:15:00
+Processing prediction row 20 with date 2025-03-07 22:25:00
+No matching historical draw for date 2025-03-07 22:25:00
+Processing prediction row 21 with date 2025-03-08 06:35:00
+Row 21 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 15, 29, 35, 37, 48, 53, 61, 68, 69, 74]
+Row 21 actual numbers: [4, 5, 10, 12, 17, 20, 24, 25, 35, 39, 42, 44, 48, 53, 66, 67, 69, 70, 78, 80]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 22 with date 2025-03-08 11:50:00
+No matching historical draw for date 2025-03-08 11:50:00
+Processing prediction row 23 with date 2025-03-08 13:15:00
+No matching historical draw for date 2025-03-08 13:15:00
+Processing prediction row 24 with date 2025-03-08 13:15:00
+No matching historical draw for date 2025-03-08 13:15:00
+Processing prediction row 25 with date 2025-03-08 13:30:00
+No matching historical draw for date 2025-03-08 13:30:00
+Processing prediction row 26 with date 2025-03-09 16:05:00
+Row 26 predicted numbers: [1, 2, 3, 6, 8, 10, 11, 13, 15, 21, 29, 32, 35, 37, 48, 53, 61, 68, 69, 74]
+Row 26 actual numbers: [7, 8, 9, 10, 15, 17, 20, 30, 31, 32, 34, 39, 40, 43, 52, 60, 73, 74, 76, 80]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+
+=== Overall Performance ===
+Total predictions evaluated: 777
+Average correct numbers: 5.3
+Best prediction: 9 correct numbers
+Worst prediction: 4 correct numbers
+Average accuracy: 26.6%
+Best streak: 6 predictions
+
+Recent trend: Improving
+Improvement rate: 3.7%
+
+Most frequently correct numbers:
+Number 2: 356 times
+Number 69: 331 times
+Number 35: 305 times
+Number 37: 303 times
+Number 15: 266 times
+
+Most frequently missed numbers:
+Number 42: 463 times
+Number 55: 444 times
+Number 36: 362 times
+Number 14: 360 times
+Number 63: 347 times
+Performance trends plot saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\performance_trends.png
+Evaluation complete
+
+==========================
+3. Fetch latest draws from lotostats.ro
+8. Complete Analysis & Save
+9. Get ML prediction
+10. Evaluate prediction accuracy
+11. Run pipeline test
+12. Run continuous learning cycle
+13. Exit
+==========================
+
+Choose an option (3,8-13): 12
+
+Running continuous learning cycle...
+
+Starting continuous learning cycle...
+
+Step 1: Evaluating past predictions...
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Predictions file shape: (34, 3)
+Historical draws file shape: (1262, 21)
+First row of predictions: ['14:30 06-03-2025', '2,5,6,8,10,11,13,15,16,32,39,44,48,53,56,61,68,69,74,77', '0.0117,0.0104,0.0091,0.4037,0.0085,0.0085,0.0093,0.0084,0.0088,0.0084,0.0095,0.0091,0.0089,0.0094,0.0086,0.0088,0.0091,0.0087,0.0090,0.0085']
+First row of historical draws: ['17:20  09-03-2025', np.int64(5), np.int64(9), np.int64(10), np.int64(12), np.int64(19), np.int64(20), np.int64(21), np.int64(23), np.int64(25), np.int64(26), np.int64(30), np.int64(31), np.int64(34), np.int64(37), np.int64(52), np.int64(55), np.int64(57), np.int64(67), np.int64(70), np.int64(71)]
+Converted date in first prediction row: 2025-03-06 14:30:00
+Converted date in first historical row: 2025-03-09 17:20:00
+Number of past predictions: 23
+Processing prediction row 0 with date 2025-03-06 14:30:00
+Row 0 predicted numbers: [2, 5, 6, 8, 10, 11, 13, 15, 16, 32, 39, 44, 48, 53, 56, 61, 68, 69, 74, 77]
+Row 0 actual numbers: [1, 6, 7, 9, 15, 20, 28, 30, 33, 34, 36, 43, 49, 55, 57, 58, 60, 65, 69, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 1 with date 2025-03-06 14:35:00
+Row 1 predicted numbers: [2, 5, 6, 8, 10, 11, 13, 16, 29, 32, 39, 44, 48, 53, 56, 61, 68, 69, 74, 77]
+Row 1 actual numbers: [2, 7, 12, 14, 15, 17, 19, 21, 26, 28, 30, 36, 42, 44, 48, 56, 59, 63, 65, 70]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 2 with date 2025-03-06 14:40:00
+Row 2 predicted numbers: [2, 5, 6, 8, 10, 11, 13, 15, 29, 32, 37, 39, 44, 45, 53, 56, 61, 64, 69, 77]
+Row 2 actual numbers: [2, 24, 27, 28, 33, 34, 42, 43, 45, 48, 51, 52, 54, 56, 61, 62, 70, 72, 74, 76]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 3 with date 2025-03-06 14:45:00
+Row 3 predicted numbers: [2, 5, 6, 8, 10, 11, 13, 15, 16, 29, 32, 37, 39, 44, 45, 53, 56, 61, 64, 69]
+Row 3 actual numbers: [2, 14, 15, 22, 23, 29, 35, 36, 37, 40, 42, 50, 55, 57, 59, 63, 69, 75, 76, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 4 with date 2025-03-06 14:45:00
+Row 4 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 15, 29, 33, 35, 37, 48, 53, 61, 68, 69]
+Row 4 actual numbers: [2, 14, 15, 22, 23, 29, 35, 36, 37, 40, 42, 50, 55, 57, 59, 63, 69, 75, 76, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 5 with date 2025-03-06 14:45:00
+Row 5 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 15, 29, 33, 35, 37, 48, 53, 61, 68, 69]
+Row 5 actual numbers: [2, 14, 15, 22, 23, 29, 35, 36, 37, 40, 42, 50, 55, 57, 59, 63, 69, 75, 76, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 6 with date 2025-03-06 15:00:00
+Row 6 predicted numbers: [1, 2, 3, 4, 5, 6, 11, 15, 32, 33, 35, 37, 44, 45, 56, 59, 61, 69, 71, 77]
+Row 6 actual numbers: [1, 5, 9, 10, 11, 17, 18, 22, 25, 26, 30, 37, 40, 46, 51, 52, 54, 56, 64, 67]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 7 with date 2025-03-06 15:25:00
+No matching historical draw for date 2025-03-06 15:25:00
+Processing prediction row 8 with date 2025-03-06 18:00:00
+Row 8 predicted numbers: [1, 2, 3, 6, 7, 8, 9, 10, 11, 13, 15, 29, 35, 37, 53, 57, 61, 68, 69, 74]
+Row 8 actual numbers: [1, 6, 8, 12, 16, 18, 26, 28, 40, 42, 43, 44, 48, 51, 53, 56, 57, 62, 70, 80]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 9 with date 2025-03-06 18:25:00
+Row 9 predicted numbers: [1, 2, 3, 6, 7, 8, 9, 10, 11, 13, 15, 29, 35, 37, 53, 57, 61, 68, 69, 74]
+Row 9 actual numbers: [3, 4, 7, 10, 11, 13, 14, 21, 35, 38, 42, 53, 55, 57, 61, 63, 64, 66, 71, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 10 with date 2025-03-06 18:35:00
+Row 10 predicted numbers: [1, 2, 3, 6, 7, 8, 9, 10, 11, 13, 15, 29, 33, 35, 37, 53, 61, 68, 69, 74]
+Row 10 actual numbers: [8, 12, 14, 21, 25, 31, 35, 37, 54, 55, 58, 61, 62, 64, 66, 67, 71, 76, 79, 80]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 11 with date 2025-03-06 19:00:00
+No matching historical draw for date 2025-03-06 19:00:00
+Processing prediction row 12 with date 2025-03-07 11:50:00
+Row 12 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 15, 29, 37, 48, 53, 61, 68, 69, 74]
+Row 12 actual numbers: [1, 6, 10, 13, 17, 18, 19, 23, 24, 30, 36, 45, 46, 49, 50, 55, 64, 69, 72, 77]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 13 with date 2025-03-07 11:55:00
+Row 13 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 15, 29, 35, 37, 48, 53, 61, 68, 69]
+Row 13 actual numbers: [4, 9, 19, 20, 33, 35, 38, 39, 44, 46, 53, 54, 55, 56, 58, 59, 61, 63, 72, 79]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 14 with date 2025-03-07 14:55:00
+Row 14 predicted numbers: [1, 2, 6, 7, 8, 9, 10, 11, 13, 15, 29, 35, 37, 48, 53, 57, 61, 68, 69, 74]
+Row 14 actual numbers: [2, 6, 7, 11, 17, 20, 22, 26, 29, 32, 41, 43, 47, 53, 57, 58, 61, 64, 67, 70]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 16 with date 2025-03-07 19:15:00
+No matching historical draw for date 2025-03-07 19:15:00
+Processing prediction row 20 with date 2025-03-07 22:25:00
+No matching historical draw for date 2025-03-07 22:25:00
+Processing prediction row 21 with date 2025-03-08 06:35:00
+Row 21 predicted numbers: [1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 15, 29, 35, 37, 48, 53, 61, 68, 69, 74]
+Row 21 actual numbers: [4, 5, 10, 12, 17, 20, 24, 25, 35, 39, 42, 44, 48, 53, 66, 67, 69, 70, 78, 80]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+Processing prediction row 22 with date 2025-03-08 11:50:00
+No matching historical draw for date 2025-03-08 11:50:00
+Processing prediction row 23 with date 2025-03-08 13:15:00
+No matching historical draw for date 2025-03-08 13:15:00
+Processing prediction row 24 with date 2025-03-08 13:15:00
+No matching historical draw for date 2025-03-08 13:15:00
+Processing prediction row 25 with date 2025-03-08 13:30:00
+No matching historical draw for date 2025-03-08 13:30:00
+Processing prediction row 26 with date 2025-03-09 16:05:00
+Row 26 predicted numbers: [1, 2, 3, 6, 8, 10, 11, 13, 15, 21, 29, 32, 35, 37, 48, 53, 61, 68, 69, 74]
+Row 26 actual numbers: [7, 8, 9, 10, 15, 17, 20, 30, 31, 32, 34, 39, 40, 43, 52, 60, 73, 74, 76, 80]
+
+Results saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\evaluation_results.xlsx
+
+=== Overall Performance ===
+Total predictions evaluated: 792
+Average correct numbers: 5.3
+Best prediction: 9 correct numbers
+Worst prediction: 4 correct numbers
+Average accuracy: 26.6%
+Best streak: 6 predictions
+
+Recent trend: Improving
+Improvement rate: 3.6%
+
+Most frequently correct numbers:
+Number 2: 362 times
+Number 69: 337 times
+Number 35: 311 times
+Number 37: 308 times
+Number 15: 271 times
+
+Most frequently missed numbers:
+Number 42: 471 times
+Number 55: 452 times
+Number 36: 368 times
+Number 14: 366 times
+Number 63: 353 times
+Performance trends plot saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed\performance_trends.png
+
+Step 2: Applying learning from evaluations...
+
+Applying continuous learning from evaluation results...
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured directory exists: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\config
+Ensured path exists for HISTORICAL_DATA: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\src
+Ensured path exists for PREDICTIONS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for ANALYSIS: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data\processed
+Ensured path exists for MODELS_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+Ensured path exists for DRIVER: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\drivers
+Ensured path exists for PROCESSED_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\data
+Ensured path exists for SRC_DIR: c:\Users\Mihai-Eduard\Desktop\Versiune1.4
+
+Evaluation insights:
+- Problematic numbers: [42, 55, 36, 14, 63]
+- Successful numbers: [2, 69, 35, 37, 15]
+- Recent trend: 0.100 (improving)
+- Average accuracy: 26.63%
+Saved model: lottery_predictor_adjusted_20250309_172654_prob_model.pkl
+Saved model: lottery_predictor_adjusted_20250309_172654_pattern_model.pkl
+Saved model: lottery_predictor_adjusted_20250309_172654_scaler.pkl
+Error saving models: cannot access local variable 'timestamp' where it is not associated with a value
+Model adjusted and saved as: lottery_predictor_adjusted_20250309_172654
+Learning metadata saved to c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models\learning_history\learning_history.csv
+
+Learning cycle completed:
+- Total learning cycles: 30
+- Current accuracy: 26.63%
+- Total improvement: 11.33%
+
+Step 3: Testing improved model...
+Loading adjusted model: lottery_predictor_adjusted_20250309_172654
+Loading models from: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models\lottery_predictor_adjusted_20250309_172654
+Models loaded successfully
+Model loaded successfully, generating new prediction...
+✓ Model found: lottery_predictor_adjusted_20250309_172654
+Loading models from: c:\Users\Mihai-Eduard\Desktop\Versiune1.4\models\lottery_predictor_adjusted_20250309_172654
+Models loaded successfully
+Error in prediction pipeline: Models not properly trained. Please train models first.
+Failed to generate prediction with improved model
+
+Continuous learning cycle complete!
+
+Continuous Learning Results:
+- Learning cycles completed: 30
+- Current prediction accuracy: 26.63%
+- Total improvement: 11.33%
+
+Most recent adjustments:
+- Boosted problematic numbers: [42, 55, 36, 14, 63]
+
+==========================
+3. Fetch latest draws from lotostats.ro
+8. Complete Analysis & Save
+9. Get ML prediction
+10. Evaluate prediction accuracy
+11. Run pipeline test
+12. Run continuous learning cycle
+13. Exit
+==========================
+
+Choose an option (3,8-13): ^A^A
